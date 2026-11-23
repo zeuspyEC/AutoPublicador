@@ -30,6 +30,9 @@ export interface BaseSri {
   descripcionCanton?: string
   fechaRevision?: string
   observacion?: string
+  estadoExoneracion?: string
+  aplicaCuota?: boolean | string
+  verMensajeElectricos?: boolean | string
 }
 export interface RubroSri { codigoRubro?: number; descripcionRubro?: string; valorRubro?: number; anioDesdePago?: number; anioHastaPago?: number; codigoTipoDeuda?: string; descripcionTipoDeuda?: string }
 /** Pago registrado en el SRI (consultaPagos): fecha, tipo y monto. */
@@ -38,7 +41,9 @@ export interface PagoSri { fechaDePago?: string; tipoDeuda?: string; monto?: num
 export interface ComponentesSri { codigoRubro?: number; componentes: { codigoComponente?: string; anioFiscal?: number; valorComponente?: number }[] }
 /** Detalle de un pago (obtenerDetallesPago): qué rubro y de qué año se pagó. */
 export interface DetallePagoSri { fechaDePago?: string; detalle: { descripcionRubro?: string; descripcionComponente?: string; anio?: number; valor?: number }[] }
-export interface ExtraSri { componentes?: ComponentesSri[]; detallesPago?: DetallePagoSri[] }
+/** Resumen de TODO el historial de pagos que calcula el servidor. */
+export interface ResumenPagosSri { totalPagos?: number; traspasos?: number; ultimoTraspaso?: string | null; primerPago?: string | null; ultimoPago?: string | null }
+export interface ExtraSri { componentes?: ComponentesSri[]; detallesPago?: DetallePagoSri[]; resumenPagos?: ResumenPagosSri }
 export interface ConsultaSri extends ExtraSri { base: BaseSri; rubros: RubroSri[]; pagos: PagoSri[]; registrada?: string }
 
 /** El 1 % de transferencia de dominio es el costo del traspaso, no una deuda de matrícula. */
@@ -89,7 +94,7 @@ export async function consultarSri(placa: string, pedir: Pedir = fetch, ms = 150
       if (s.status === 404) throw new ErrorPlaca('no-existe', `El SRI no tiene registrada la placa ${placa}.`)
       if (s.ok) {
         const j = (await s.json()) as Partial<ConsultaSri>
-        if (j.base) return { base: j.base, rubros: j.rubros ?? [], pagos: j.pagos ?? [], registrada: j.registrada, componentes: j.componentes ?? [], detallesPago: j.detallesPago ?? [] }
+        if (j.base) return { base: j.base, rubros: j.rubros ?? [], pagos: j.pagos ?? [], registrada: j.registrada, componentes: j.componentes ?? [], detallesPago: j.detallesPago ?? [], resumenPagos: j.resumenPagos }
       }
     } catch (e) {
       if (e instanceof ErrorPlaca) throw e
@@ -158,6 +163,9 @@ export function normalizarBase(crudo: Record<string, unknown>): BaseSri {
     descripcionCanton: buscar(/^descripcioncanton$/, /canton/),
     fechaRevision: buscar(/^fecharevision$/, /revision/),
     observacion: buscar(/^observacion$/),
+    estadoExoneracion: buscar(/^estadoexoneracion$/),
+    aplicaCuota: buscar(/^aplicacuota$/) as unknown as boolean,
+    verMensajeElectricos: buscar(/^vermensajeelectricos$/) as unknown as boolean,
   } as BaseSri
 }
 
@@ -245,6 +253,15 @@ export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[]
   }
   if (base.fechaCaducidadMatricula) add(null, 'Matrícula vigente hasta', base.fechaCaducidadMatricula.slice(0, 10))
   if (base.observacion) add(null, 'Observación del SRI', String(base.observacion).trim())
+  const si = (x: unknown) => x === true || /^(s|si|sí|true)$/i.test(String(x ?? '').trim())
+  if (si(base.estadoExoneracion))
+    avisos.push('El SRI registra el vehículo como EXONERADO (p. ej., por discapacidad): el traspaso puede tener condiciones o impuestos pendientes. Verifícalo en el SRI antes de publicar.')
+  if (si(base.verMensajeElectricos)) add(null, 'Tipo de vehículo según el SRI', 'Eléctrico')
+  if (si(base.aplicaCuota)) add(null, 'Impuesto ambiental', 'Aplica pago en cuotas (según el SRI)')
+  // Resumen de todo el historial de pagos: cuántas veces se pagó un traspaso de dominio y desde cuándo hay pagos
+  const rp = extra.resumenPagos
+  if (rp?.totalPagos) add(null, 'Pagos registrados en el SRI', `${rp.totalPagos}${rp.primerPago ? ` (desde ${rp.primerPago.slice(0, 4)})` : ''}`)
+  if (rp && rp.totalPagos) add(null, 'Traspasos de dominio pagados (historial del SRI)', rp.traspasos ? `${rp.traspasos}${rp.ultimoTraspaso ? `, el último el ${rp.ultimoTraspaso}` : ''}` : 'Ninguno registrado')
   if (/^(s|si|sí)$/i.test((base.prohibidoEnajenar ?? '').trim()))
     avisos.push('⚠️ El SRI registra prohibición de enajenar: revisa la situación legal antes de publicar.')
   return { resumen: '', hallazgos: h, avisos, fuentes: [fuente] }

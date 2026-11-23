@@ -269,3 +269,19 @@ describe('placa: descripciones reales de modelos del SRI (verificadas con placas
     expect(r.avisos.join(' ')).toMatch(/Matrícula 2017–2026 pendiente en el SRI: \$1066\.11/)
   })
 })
+
+describe('placa: campos adicionales de la respuesta real', () => {
+  it('exonerado, eléctrico, cuotas ambientales y resumen de traspasos', () => {
+    const r = interpretarSri('PBA1234', { ...REAL, estadoExoneracion: 'SI', verMensajeElectricos: true, aplicaCuota: true } as BaseSri, [], [], 'PBA1234',
+      { resumenPagos: { totalPagos: 22, traspasos: 3, ultimoTraspaso: '2024-10-23', primerPago: '2006-07-03' } })
+    expect(r.avisos.join(' ')).toMatch(/EXONERADO/)
+    const v = (e: string) => r.hallazgos.find((h) => h.etiqueta.startsWith(e))?.valor
+    expect(v('Tipo de vehículo según el SRI')).toBe('Eléctrico')
+    expect(v('Impuesto ambiental')).toMatch(/cuotas/)
+    expect(v('Pagos registrados en el SRI')).toBe('22 (desde 2006)')
+    expect(v('Traspasos de dominio pagados')).toBe('3, el último el 2024-10-23')
+  })
+  it('«NO» en exoneración no genera aviso', () => {
+    expect(interpretarSri('PBA1234', REAL, []).avisos.join(' ')).not.toMatch(/EXONERADO/)
+  })
+})

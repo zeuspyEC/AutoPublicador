@@ -95,3 +95,15 @@ describe('servidor de placas: desglose y detalle de pagos', () => {
     expect(j.pagos[0]).toEqual({ fechaDePago: '2025-02-17', tipoDeuda: undefined, monto: 80 }) // sin código de recaudación
   })
 })
+
+describe('servidor de placas: resumen de todo el historial de pagos', () => {
+  it('cuenta traspasos por fecha (aunque haya varios pagos el mismo día) y el rango de pagos', async () => {
+    const { resumirPagos } = await import('./index.js')
+    expect(resumirPagos([
+      { fechaDePago: '2010-09-01 03:37', tipoDeuda: 'PAGO DEL VALOR DE LA MATRÍCULA' },
+      { fechaDePago: '2016-12-08 03:21', tipoDeuda: 'PAGO DEL VALOR DE TRANSFERENCIA DE DOMINIO' },
+      { fechaDePago: '2016-12-08 05:00', tipoDeuda: 'PAGO DEL VALOR DE TRANSFERENCIA DE DOMINIO' },
+      { fechaDePago: '2024-10-23 09:25', tipoDeuda: 'PAGO DEL VALOR DE TRANSFERENCIA DE DOMINIO' },
+    ])).toEqual({ totalPagos: 4, traspasos: 2, ultimoTraspaso: '2024-10-23', primerPago: '2010-09-01', ultimoPago: '2024-10-23' })
+  })
+})

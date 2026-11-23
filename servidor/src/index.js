@@ -86,7 +86,17 @@ export async function consultarPlaca(placa, pedir = fetch) {
     pagos: recientes.map((p) => ({ fechaDePago: p.fechaDePago, tipoDeuda: p.tipoDeuda, monto: p.monto })).slice(0, 15),
     componentes: sinDatosPersonales(componentes), detallesPago: sinDatosPersonales(detalles),
     planExcepcional: sinDatosPersonales(plan),
+    // Resumen de TODO el historial (no solo los 15 recientes): cuántos traspasos de dominio se pagaron y desde cuándo
+    resumenPagos: resumirPagos(pagos),
   }
+}
+
+/** Cuenta los traspasos (pagos de transferencia de dominio, uno por fecha) y el primer y último pago registrados. */
+export function resumirPagos(pagos) {
+  const fechas = pagos.map((p) => String(p.fechaDePago ?? '')).filter(Boolean).sort()
+  const traspasos = [...new Set(pagos.filter((p) => /TRANSFER/i.test(p.tipoDeuda ?? '')).map((p) => String(p.fechaDePago ?? '').slice(0, 10)).filter(Boolean))].sort()
+  return { totalPagos: pagos.length, traspasos: traspasos.length, ultimoTraspaso: traspasos[traspasos.length - 1] ?? null,
+    primerPago: fechas[0]?.slice(0, 10) ?? null, ultimoPago: fechas[fechas.length - 1]?.slice(0, 10) ?? null }
 }
 
 export async function manejar(request, pedir = fetch) {
@@ -102,7 +112,7 @@ export async function manejar(request, pedir = fetch) {
   if (!placaValida(placa)) return json({ error: 'Placa no válida' }, 400, origen)
 
   const cache = typeof caches !== 'undefined' ? caches.default : null
-  const clave = new Request(`https://cache.autopublicador/v3/placa/${placa}`)
+  const clave = new Request(`https://cache.autopublicador/v4/placa/${placa}`)
   if (cache) {
     const guardada = await cache.match(clave)
     if (guardada) return json(await guardada.json(), 200, origen, { 'X-Cache': 'HIT' })
@@ -112,7 +122,7 @@ export async function manejar(request, pedir = fetch) {
     return json({ error: 'El SRI no respondió. Intenta de nuevo en unos minutos.' }, 502, origen)
   }
   if (!r.encontrada) return json({ error: `El SRI no tiene registrada la placa ${placa}.` }, r.estado >= 500 ? 502 : 404, origen)
-  const cuerpo = { placa, registrada: r.registrada, base: r.base, rubros: r.rubros, pagos: r.pagos, componentes: r.componentes, detallesPago: r.detallesPago, planExcepcional: r.planExcepcional, consultado: new Date().toISOString() }
+  const cuerpo = { placa, registrada: r.registrada, base: r.base, rubros: r.rubros, pagos: r.pagos, componentes: r.componentes, detallesPago: r.detallesPago, planExcepcional: r.planExcepcional, resumenPagos: r.resumenPagos, consultado: new Date().toISOString() }
   if (cache) await cache.put(clave, new Response(JSON.stringify(cuerpo), { headers: { 'Cache-Control': `max-age=${CACHE_SEGUNDOS}` } }))
   return json(cuerpo, 200, origen, { 'X-Cache': 'MISS' })
 }
