@@ -106,6 +106,18 @@ describe('plantillas', () => {
     expect(d).toContain('✅ Año: 2008 (Procedencia Argentina)')
     expect(d).toContain('✅ Matrícula: Al día 2025 (Cero multas)')
   })
+  it('redacción: versión en mayúsculas, nombres propios y sin repetir el motor', () => {
+    const t = titulos(ctx).find((x) => x.id === 'oportunidad')!.texto
+    expect(t).toContain('Peugeot 206 XT del año 08')
+    const completa = descripciones(ctx).find((x) => x.id === 'completa')!.texto
+    expect(completa).toContain('con techo corredizo y pantalla Android')
+    expect(completa).toContain('✅ Marca/Modelo: Peugeot 206 XT 1.6L')
+    expect(completa).not.toContain('✅ Motor:') // sin combustible, el motor ya está en Marca/Modelo
+    const contacto = descripciones(ctx).find((x) => x.id === 'contacto-primero')!.texto
+    expect(contacto).toContain('⏰ Horario de atención: Todos los días de 08:30 a 17:30.')
+    const conDiesel = descripciones({ ...ctx, v: { ...vehiculo, combustible: 'Diésel' } }).find((x) => x.id === 'completa')!.texto
+    expect(conDiesel).toContain('✅ Motor: 1.6L Diésel')
+  })
   it('sin horario configurado no se escribe la línea de horario', () => {
     const d = descripciones({ ...ctx, perfil: { ...perfil, horario: '' } })
     for (const x of d) expect(x.texto).not.toMatch(/HORARIO|Atiendo|ATENDEMOS/)

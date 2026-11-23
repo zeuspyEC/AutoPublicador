@@ -26,6 +26,7 @@ const lineas = (...ls: (string | false | undefined | null)[]) => ls.filter((l) =
 const bloque = (...ls: (string | false | undefined | null)[]) => ls.filter(Boolean) as string[]
 const mayus = (s: string) => s.toLocaleUpperCase('es')
 const miles = (d: string) => (d ? (+d).toLocaleString('es-EC').replace(/,/g, '.') : '')
+const minusculaInicial = (s: string) => (/^[A-ZÁÉÍÓÚÑ]{2}/.test(s) ? s : s.charAt(0).toLocaleLowerCase('es') + s.slice(1))
 const capitalizar = (s: string) => s.replace(/(^|\s)(\p{L})/gu, (_, a, b) => a + b.toLocaleUpperCase('es'))
 
 function nombreVehiculo(v: Vehiculo, conVersion = true): string {
@@ -63,7 +64,7 @@ export function titulos(c: Contexto): Variante[] {
   const lista: [string, string][] = [
     ['gancho-cambio', `VENDO//CAMBIO 🔥 ${N} ${M} ${A} ${mat} ${T} ${v.aTodaPrueba ? 'A TODA PRUEBA' : ''} 💯`],
     ['full-equipo', `🔥 ${NV} ${M} ${v.fullEquipo ? 'FULL EQUIPO' : ''} ${eq ? '/ ' + eq : ''} 🚗`],
-    ['oportunidad', `VENDO DE OPORTUNIDAD ${capitalizar(nombreVehiculo(v).toLowerCase())} ${A ? `del año ${anioCorto(v)}` : ''} ${v.matricula ? 'papeles al día' : ''} ${v.aTodaPrueba ? 'a toda prueba' : ''}`],
+    ['oportunidad', `VENDO DE OPORTUNIDAD ${nombreVehiculo(v)} ${A ? `del año ${anioCorto(v)}` : ''} ${v.matricula ? 'papeles al día' : ''} ${v.aTodaPrueba ? 'a toda prueba' : ''}`],
     ['explosion', `VENDO//CAMBIO 💥 ${NV} ${A} ${v.matricula ? mayus(v.matricula) : ''} ${v.aTodaPrueba ? 'TODA PRUEBA' : ''} 💯✅`],
     ['directo', `🚗 ${N} ${A} ${M} ${T} | ${v.matricula ? 'MATRÍCULA AL DÍA' : ''} ${v.negociable ? '| NEGOCIABLE ✅' : ''}`],
     ['recibo-auto', `💥 OPORTUNIDAD ${N} ${A} ${M} — RECIBO TU AUTO O MOTO 🔄`],
@@ -80,7 +81,8 @@ function detalles(v: Vehiculo, prefijo = '✅'): string[] {
   return bloque(
     nombreVehiculo(v) && `${prefijo} Marca/Modelo: ${limpiar(`${nombreVehiculo(v)} ${motorL(v)}`)}`,
     v.anio && `${prefijo} Año: ${v.anio}${v.procedencia ? ` (Procedencia ${v.procedencia})` : ''}`,
-    (v.motor || v.combustible) && `${prefijo} Motor: ${limpiar(`${motorL(v)} ${v.combustible}`)}`,
+    // El cilindraje ya va en «Marca/Modelo»: la línea de motor solo se agrega si aporta el combustible
+    v.combustible && `${prefijo} Motor: ${limpiar(`${motorL(v)} ${v.combustible}`)}`,
     v.transmision && `${prefijo} Transmisión: ${v.transmision}`,
     v.traccion && `${prefijo} Tracción: ${v.traccion}`,
     v.kilometraje && `${prefijo} Kilometraje: ${miles(v.kilometraje)} km`,
@@ -108,7 +110,7 @@ export function descripciones(c: Contexto): Variante[] {
   const horario = c.perfil.horario.trim()
   const ben = activos(c)
   const vehiculo = nombreVehiculo(v) || 'vehículo'
-  const equipo = v.equipamiento.slice(0, 2).map((e) => e.toLowerCase())
+  const equipo = v.equipamiento.slice(0, 2).map(minusculaInicial) // «pantalla Android», no «pantalla android»
 
   const completa = lineas(
     `¡Se vende o se cambia! ${capitalizar(vehiculo)}${v.anio ? ` ${v.anio}` : ''} en excelente estado${equipo.length ? `, con ${equipo.join(' y ')}` : ''}. Ideal para ${idealPara(v)}, con toda la documentación en regla.`,
@@ -137,7 +139,7 @@ export function descripciones(c: Contexto): Variante[] {
     ...detalles(v, '▪️').slice(1),
     '',
     `👨‍💼 ${nombre}: Vendedor Autorizado 💯`,
-    horario && `⏰ Atiendo ${horario.toLowerCase().startsWith('de') ? '' : 'de '}${horario}.`,
+    horario && `⏰ Horario de atención: ${horario}.`,
     `📍 Ubicación: ${ubic(c)}.`,
     `¡No olvides pedir tu cita a nombre de ${NOMBRE} al llegar!`,
   )
