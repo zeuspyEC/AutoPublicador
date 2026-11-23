@@ -142,7 +142,7 @@ plantillas, convierte `{{ubl|…}}`, `{{convert|…}}`/`{{convertir|…}}` y `&n
 
 ## 8. Pruebas
 
-- `npm test` — 28 pruebas unitarias (analizador con los casos de las publicaciones reales, teléfono, plantillas,
+- `npm test` — 29 pruebas unitarias (analizador con los casos de las publicaciones reales, teléfono, plantillas,
   fichas de Wikipedia con texto real, formato de respuesta de Gemini).
 - `npm run test:integracion` — 3 pruebas contra Wikipedia real (Peugeot 206, año fuera de producción, Chevrolet
   Vitara → Suzuki Vitara).
@@ -185,4 +185,5 @@ de terceros, `.env` ni claves; mantener este archivo al día (sección 11).
 | 2026-11-23 | Núcleo: analizador de texto libre, teléfono a prueba de Facebook, 8 títulos y 6 descripciones (15 pruebas). |
 | 2026-11-23 | Investigación con fuente: Wikipedia ES/EN (lectura robusta de fichas) y Google vía Gemini. Se corrigieron: kilometraje que absorbía el «4» de «4x4», año confundido con el modelo «Peugeot 2008», palabras comunes tomadas como modelos, `&nbsp;` en motores, error 429 de Wikipedia sin `Api-User-Agent`. |
 | 2026-11-23 | Interfaz móvil en 4 pasos, ajustes (perfil, ubicación, beneficios, clave de Google), historial. Prueba E2E en Chrome. Mejoras de redacción (versión «XT», «pantalla Android», horario, motor sin repetir). |
-| 2026-11-23 | Despliegue automático en GitHub Pages con pruebas previas. |
+| 2026-11-23 | Despliegue automático en GitHub Pages con pruebas previas. Verificado en el sitio publicado (Chrome a 390 px). |
+| 2026-11-23 | v0.1.1 — Prueba en el sitio publicado con otro vehículo: precio escrito sin símbolo («… cero multas 4990») no se detectaba; títulos largos quedaban cortados en su cuadro. Ambos corregidos (29 pruebas). |

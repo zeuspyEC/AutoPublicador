@@ -68,6 +68,14 @@ export function analizar(texto: string): Analisis {
   if (anio4) poner('anio', anio4[1])
   else if (anio2) poner('anio', anioDeDosDigitos(+anio2[1]))
 
+  // --- Precio sin símbolo («… cero multas 4990 negociable»): el número suelto que queda, desde 500 ---
+  if (!v.precio) {
+    const sueltos = [...t.matchAll(/(?<![\w.,/])(\d{1,3}(?:[.,]\d{3})+|\d{3,6})(?![\w.,/]|\s*(?:km|kms|cc|mil|hp|cv|p\b|puertas))/g)]
+      .map((m) => soloDigitos(m[1]))
+      .filter((n) => n !== v.anio && !/^(19[5-9]\d|20[0-3]\d)$/.test(n) && +n >= 500)
+    if (sueltos.length) poner('precio', sueltos[0])
+  }
+
   // --- Transmisión y combustible ---
   if (/\b(autom[aá]tic[oa]|a\/t|tiptronic|cvt|caja autom)/.test(t)) poner('transmision', 'Automática')
   else if (/\b(manual|mec[aá]nic[oa]|t\/m|est[aá]ndar|sincr[oó]nic)/.test(t) && !/mec[aá]nico de confianza|tu mec[aá]nico/.test(t)) poner('transmision', 'Manual')

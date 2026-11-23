@@ -165,7 +165,7 @@ textarea.entrada { font-size: 1.05rem; }
 .lista-titulos { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .6rem; }
 .lista-titulos li { border: 2px solid var(--borde); border-radius: 12px; padding: .5rem .6rem; cursor: pointer; }
 .lista-titulos li.elegido { border-color: var(--primario); background: var(--primario-claro); }
-.texto-titulo { font-weight: 700; border: 0; background: transparent; padding: .2rem; min-height: 0; }
+.texto-titulo { font-weight: 700; border: 0; background: transparent; padding: .2rem; min-height: 0; field-sizing: content; /* crece con el texto */ }
 .lista-titulos .fila { margin-top: .2rem; justify-content: space-between; }
 .largo { font-size: .78rem; color: var(--texto-2); }
 .largo.excede { color: var(--peligro); font-weight: 700; }

@@ -44,7 +44,7 @@ export function Resultados({ v, titulos, descripciones, alGuardar }: Props) {
           const largo = [...texto].length
           return (
             <li key={t.id} className={i === titulo ? 'elegido' : ''} onClick={() => setTitulo(i)}>
-              <textarea className="texto-titulo" rows={2} value={texto} onChange={(e) => setEditados({ ...editados, [`t${i}`]: e.target.value })} />
+              <textarea className="texto-titulo" rows={Math.max(2, Math.ceil(largo / 28))} value={texto} onChange={(e) => setEditados({ ...editados, [`t${i}`]: e.target.value })} />
               <div className="fila">
                 <span className={`largo ${largo > LIMITE_TITULO ? 'excede' : ''}`}>{largo}/{LIMITE_TITULO}</span>
                 <Copiar texto={texto} />

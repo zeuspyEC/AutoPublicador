@@ -57,6 +57,7 @@ describe('analizador de texto libre (casos de las publicaciones de ejemplo)', ()
     expect([v.marca, v.modelo, v.anio, v.puertas, v.transmision, v.procedencia, v.matricula]).toEqual(
       ['Chevrolet', 'Vitara', '1997', '3', 'Manual', 'Ecuador', 'Al día 2025'])
     expect(v.version).toContain('DLX')
+    expect(v.precio).toBe('4990') // precio sin símbolo, como se suele escribir
     expect(v.equipamiento).toContain('Aire acondicionado')
   })
   it('solo el modelo: «vitara 97» deduce la marca más común en Ecuador', () => {
@@ -67,6 +68,11 @@ describe('analizador de texto libre (casos de las publicaciones de ejemplo)', ()
     const { vehiculo: v } = analizar('Toyota Hilux 2.5 2014 diesel automática 4x4 145.000 km 28500 dólares')
     expect([v.modelo, v.motor, v.anio, v.combustible, v.transmision, v.kilometraje, v.precio]).toEqual(
       ['Hilux', '2.5', '2014', 'Diésel', 'Automática', '145000', '28500'])
+  })
+  it('precio sin símbolo: no confunde el año, la matrícula, los km ni el motor', () => {
+    expect(analizar('kia rio 2016 1.4 85000 km matrícula 2025 11500').vehiculo.precio).toBe('11500')
+    expect(analizar('nissan sentra 2010 negociable').vehiculo.precio).toBe('')
+    expect(analizar('suzuki forsa del 92 2.750').vehiculo.precio).toBe('2750')
   })
   it('informa los datos importantes que faltan', () => {
     const { faltantes } = analizar('kia rio')
