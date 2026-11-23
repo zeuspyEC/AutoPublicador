@@ -45,16 +45,38 @@ async function pedirSri(url, ms, pedir) {
   } finally { clearTimeout(t) }
 }
 
-/** Consulta base + rubros (valores pendientes). `pedir` se inyecta en las pruebas. */
+/** Placas antiguas de 3 números se registran con un 0: «PJM343» → «PJM0343» (igual que PLACAS_EC). */
+export function variantesPlaca(placa) {
+  const m = placa.match(/^([A-Z]{3})(\d{3})$/)
+  return m ? [`${m[1]}0${m[2]}`, placa] : [placa]
+}
+
+const lista = (d) => (Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : [])
+
+/** Consulta base + rubros (valores pendientes) + historial de pagos + plan excepcional. `pedir` se inyecta en las pruebas. */
 export async function consultarPlaca(placa, pedir = fetch) {
-  const base = await pedirSri(`${SRI}/BaseVehiculo/obtenerPorNumeroPlacaOPorNumeroCampvOPorNumeroCpn?numeroPlacaCampvCpn=${placa}`, 20000, pedir)
+  let base = { estado: 404, datos: null }
+  let registrada = placa
+  for (const v of variantesPlaca(placa)) {
+    base = await pedirSri(`${SRI}/BaseVehiculo/obtenerPorNumeroPlacaOPorNumeroCampvOPorNumeroCpn?numeroPlacaCampvCpn=${v}`, 20000, pedir)
+    if (base.datos && base.datos.codigoVehiculo) { registrada = v; break }
+  }
   if (!base.datos || !base.datos.codigoVehiculo) return { encontrada: false, estado: base.estado }
-  let rubros = []
-  try {
-    const r = await pedirSri(`${SRI}/ConsultaRubros/obtenerPorCodigoVehiculo?codigoVehiculo=${base.datos.codigoVehiculo}`, 15000, pedir)
-    if (Array.isArray(r.datos)) rubros = r.datos
-  } catch { /* sin rubros: se devuelve solo la base */ }
-  return { encontrada: true, base: sinDatosPersonales(base.datos), rubros: sinDatosPersonales(rubros) }
+  const codigo = base.datos.codigoVehiculo
+  const opcional = (url, ms) => pedirSri(url, ms, pedir).then((r) => lista(r.datos)).catch(() => [])
+  const [rubros, pagos, plan] = await Promise.all([
+    opcional(`${SRI}/ConsultaRubros/obtenerPorCodigoVehiculo?codigoVehiculo=${codigo}`, 15000),
+    opcional(`${SRI}/consultaPagos/obtenerPorPlacaCampvCpn?placaCampvCpn=${registrada}`, 15000),
+    opcional(`${SRI}/CuotasImpAmbiental/obtenerDetallePlanExcepcionalPagosPorCodigoVehiculo?codigo=${codigo}`, 15000),
+  ])
+  return {
+    encontrada: true, registrada,
+    base: sinDatosPersonales(base.datos), rubros: sinDatosPersonales(rubros),
+    // Solo fecha, tipo y monto de cada pago, del más reciente al más antiguo
+    pagos: pagos.map((p) => ({ fechaDePago: p.fechaDePago, tipoDeuda: p.tipoDeuda, monto: p.monto }))
+      .sort((x, y) => String(y.fechaDePago ?? '').localeCompare(String(x.fechaDePago ?? ''))).slice(0, 15),
+    planExcepcional: sinDatosPersonales(plan),
+  }
 }
 
 export async function manejar(request, pedir = fetch) {
@@ -70,7 +92,7 @@ export async function manejar(request, pedir = fetch) {
   if (!placaValida(placa)) return json({ error: 'Placa no válida' }, 400, origen)
 
   const cache = typeof caches !== 'undefined' ? caches.default : null
-  const clave = new Request(`https://cache.autopublicador/placa/${placa}`)
+  const clave = new Request(`https://cache.autopublicador/v2/placa/${placa}`)
   if (cache) {
     const guardada = await cache.match(clave)
     if (guardada) return json(await guardada.json(), 200, origen, { 'X-Cache': 'HIT' })
@@ -80,7 +102,7 @@ export async function manejar(request, pedir = fetch) {
     return json({ error: 'El SRI no respondió. Intenta de nuevo en unos minutos.' }, 502, origen)
   }
   if (!r.encontrada) return json({ error: `El SRI no tiene registrada la placa ${placa}.` }, r.estado >= 500 ? 502 : 404, origen)
-  const cuerpo = { placa, base: r.base, rubros: r.rubros, consultado: new Date().toISOString() }
+  const cuerpo = { placa, registrada: r.registrada, base: r.base, rubros: r.rubros, pagos: r.pagos, planExcepcional: r.planExcepcional, consultado: new Date().toISOString() }
   if (cache) await cache.put(clave, new Response(JSON.stringify(cuerpo), { headers: { 'Cache-Control': `max-age=${CACHE_SEGUNDOS}` } }))
   return json(cuerpo, 200, origen, { 'X-Cache': 'MISS' })
 }

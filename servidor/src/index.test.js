@@ -44,3 +44,33 @@ describe('servidor de placas', () => {
     expect(sinDatosPersonales({ a: 1, nombrePropietario: 'x', n: [{ cedula: '1' }] })).toEqual({ a: 1, n: [{}] })
   })
 })
+
+describe('servidor de placas: más datos del SRI', () => {
+  it('placa antigua de 3 números: prueba con el 0 (PJM343 → PJM0343)', async () => {
+    const urls = []
+    const r = await manejar(pedido('/placa/PJM343'), async (url) => {
+      urls.push(url)
+      if (url.includes('BaseVehiculo')) return new Response(JSON.stringify(url.endsWith('PJM0343') ? BASE : {}))
+      return new Response('[]')
+    })
+    const j = await r.json()
+    expect(r.status).toBe(200)
+    expect(j.registrada).toBe('PJM0343')
+    expect(urls.some((u) => u.includes('consultaPagos') && u.endsWith('PJM0343'))).toBe(true)
+  })
+  it('incluye el historial de pagos y el plan excepcional, sin datos personales', async () => {
+    const r = await manejar(pedido('/placa/PBA1234'), async (url) => new Response(JSON.stringify(
+      url.includes('BaseVehiculo') ? BASE : url.includes('consultaPagos') ? { data: [{ fechaDePago: '2026-03-01', monto: 80, nombreContribuyente: 'X' }] } : [])))
+    const j = await r.json()
+    expect(j.pagos).toEqual([{ fechaDePago: '2026-03-01', monto: 80 }])
+    expect(j.planExcepcional).toEqual([])
+  })
+  it('si una consulta opcional falla, igual responde con la base', async () => {
+    const r = await manejar(pedido('/placa/PBA1234'), async (url) => {
+      if (url.includes('BaseVehiculo')) return new Response(JSON.stringify(BASE))
+      throw new Error('timeout')
+    })
+    expect(r.status).toBe(200)
+    expect((await r.json()).rubros).toEqual([])
+  })
+})

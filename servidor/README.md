@@ -14,7 +14,14 @@ GET /salud          →  { ok: true }
 - Elimina recursivamente cualquier campo con datos personales (propietario, cédula, dirección, teléfono…).
 - Errores claros: 400 placa no válida, 404 no registrada, 502 SRI sin respuesta.
 
-## Publicarlo (gratis, una vez)
+## Publicado
+
+`https://autopublicador-placas.erick-costa.workers.dev` (fijado en `src/servicios/placa.ts` → `SERVIDOR_PLACAS`).
+
+Además de base y rubros consulta el historial de pagos (`consultaPagos/obtenerPorPlacaCampvCpn`, solo fecha/tipo/monto) y el plan
+excepcional, y prueba las placas antiguas con 0 (`PJM343` → `PJM0343`).
+
+## Publicarlo de nuevo (gratis)
 
 Requiere una cuenta de Cloudflare (gratuita).
 
