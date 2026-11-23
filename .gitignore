@@ -27,3 +27,7 @@ dist-ssr
 referencias/capturas/
 .env
 *.local
+
+# Cloudflare Wrangler
+servidor/.wrangler/
+.wrangler/

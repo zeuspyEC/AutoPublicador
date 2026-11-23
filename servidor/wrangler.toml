@@ -1,0 +1,5 @@
+# Servidor de placas de AutoPublicador (Cloudflare Workers, plan gratuito).
+# Desplegar:  cd servidor  →  npx wrangler login  →  npx wrangler deploy
+name = "autopublicador-placas"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
