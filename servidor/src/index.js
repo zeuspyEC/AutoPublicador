@@ -69,12 +69,22 @@ export async function consultarPlaca(placa, pedir = fetch) {
     opcional(`${SRI}/consultaPagos/obtenerPorPlacaCampvCpn?placaCampvCpn=${registrada}`, 15000),
     opcional(`${SRI}/CuotasImpAmbiental/obtenerDetallePlanExcepcionalPagosPorCodigoVehiculo?codigo=${codigo}`, 15000),
   ])
+  const recientes = [...pagos].sort((x, y) => String(y.fechaDePago ?? '').localeCompare(String(x.fechaDePago ?? '')))
+  // Desglose de cada valor pendiente (ConsultaComponente) y detalle de los 3 pagos más recientes (obtenerDetallesPago)
+  const [componentes, detalles] = await Promise.all([
+    Promise.all(rubros.filter((r) => r.codigoRubro).slice(0, 8).map((r) =>
+      opcional(`${SRI}/ConsultaComponente/obtenerListaComponentesPorCodigoConsultaRubro?codigoConsultaRubro=${r.codigoRubro}`, 12000)
+        .then((c) => ({ codigoRubro: r.codigoRubro, componentes: c })))),
+    Promise.all(recientes.filter((p) => p.codigoRecaudacion).slice(0, 3).map((p) =>
+      opcional(`${SRI}/consultaPagos/obtenerDetallesPago?codigoRecaudacion=${p.codigoRecaudacion}`, 12000)
+        .then((d) => ({ fechaDePago: p.fechaDePago, detalle: d })))),
+  ])
   return {
     encontrada: true, registrada,
     base: sinDatosPersonales(base.datos), rubros: sinDatosPersonales(rubros),
     // Solo fecha, tipo y monto de cada pago, del más reciente al más antiguo
-    pagos: pagos.map((p) => ({ fechaDePago: p.fechaDePago, tipoDeuda: p.tipoDeuda, monto: p.monto }))
-      .sort((x, y) => String(y.fechaDePago ?? '').localeCompare(String(x.fechaDePago ?? ''))).slice(0, 15),
+    pagos: recientes.map((p) => ({ fechaDePago: p.fechaDePago, tipoDeuda: p.tipoDeuda, monto: p.monto })).slice(0, 15),
+    componentes: sinDatosPersonales(componentes), detallesPago: sinDatosPersonales(detalles),
     planExcepcional: sinDatosPersonales(plan),
   }
 }
@@ -92,7 +102,7 @@ export async function manejar(request, pedir = fetch) {
   if (!placaValida(placa)) return json({ error: 'Placa no válida' }, 400, origen)
 
   const cache = typeof caches !== 'undefined' ? caches.default : null
-  const clave = new Request(`https://cache.autopublicador/v2/placa/${placa}`)
+  const clave = new Request(`https://cache.autopublicador/v3/placa/${placa}`)
   if (cache) {
     const guardada = await cache.match(clave)
     if (guardada) return json(await guardada.json(), 200, origen, { 'X-Cache': 'HIT' })
@@ -102,7 +112,7 @@ export async function manejar(request, pedir = fetch) {
     return json({ error: 'El SRI no respondió. Intenta de nuevo en unos minutos.' }, 502, origen)
   }
   if (!r.encontrada) return json({ error: `El SRI no tiene registrada la placa ${placa}.` }, r.estado >= 500 ? 502 : 404, origen)
-  const cuerpo = { placa, registrada: r.registrada, base: r.base, rubros: r.rubros, pagos: r.pagos, planExcepcional: r.planExcepcional, consultado: new Date().toISOString() }
+  const cuerpo = { placa, registrada: r.registrada, base: r.base, rubros: r.rubros, pagos: r.pagos, componentes: r.componentes, detallesPago: r.detallesPago, planExcepcional: r.planExcepcional, consultado: new Date().toISOString() }
   if (cache) await cache.put(clave, new Response(JSON.stringify(cuerpo), { headers: { 'Cache-Control': `max-age=${CACHE_SEGUNDOS}` } }))
   return json(cuerpo, 200, origen, { 'X-Cache': 'MISS' })
 }

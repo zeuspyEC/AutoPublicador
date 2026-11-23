@@ -74,3 +74,24 @@ describe('servidor de placas: más datos del SRI', () => {
     expect((await r.json()).rubros).toEqual([])
   })
 })
+
+describe('servidor de placas: desglose y detalle de pagos', () => {
+  it('pide ConsultaComponente por cada rubro y obtenerDetallesPago de los pagos recientes', async () => {
+    const urls = []
+    const r = await manejar(pedido('/placa/PBA1234'), async (url) => {
+      urls.push(url)
+      if (url.includes('BaseVehiculo')) return new Response(JSON.stringify(BASE))
+      if (url.includes('ConsultaRubros')) return new Response(JSON.stringify([{ codigoRubro: 77, valorRubro: 41.83 }]))
+      if (url.includes('ConsultaComponente')) return new Response(JSON.stringify([{ codigoComponente: 'RECARGO', valorComponente: 12.98 }]))
+      if (url.includes('obtenerPorPlacaCampvCpn')) return new Response(JSON.stringify([{ codigoRecaudacion: 5, fechaDePago: '2025-02-17', monto: 80 }]))
+      if (url.includes('obtenerDetallesPago')) return new Response(JSON.stringify([{ descripcionRubro: 'TASAS ANT', anio: 2025, valor: 36, nombreContribuyente: 'X' }]))
+      return new Response('[]')
+    })
+    const j = await r.json()
+    expect(urls.some((u) => u.endsWith('codigoConsultaRubro=77'))).toBe(true)
+    expect(urls.some((u) => u.endsWith('codigoRecaudacion=5'))).toBe(true)
+    expect(j.componentes).toEqual([{ codigoRubro: 77, componentes: [{ codigoComponente: 'RECARGO', valorComponente: 12.98 }] }])
+    expect(j.detallesPago).toEqual([{ fechaDePago: '2025-02-17', detalle: [{ descripcionRubro: 'TASAS ANT', anio: 2025, valor: 36 }] }])
+    expect(j.pagos[0]).toEqual({ fechaDePago: '2025-02-17', tipoDeuda: undefined, monto: 80 }) // sin código de recaudación
+  })
+})
