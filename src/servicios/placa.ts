@@ -31,10 +31,15 @@ export interface BaseSri {
   fechaRevision?: string
   observacion?: string
 }
-export interface RubroSri { descripcionRubro?: string; valorRubro?: number; anioDesdePago?: number; anioHastaPago?: number; codigoTipoDeuda?: string; descripcionTipoDeuda?: string }
+export interface RubroSri { codigoRubro?: number; descripcionRubro?: string; valorRubro?: number; anioDesdePago?: number; anioHastaPago?: number; codigoTipoDeuda?: string; descripcionTipoDeuda?: string }
 /** Pago registrado en el SRI (consultaPagos): fecha, tipo y monto. */
 export interface PagoSri { fechaDePago?: string; tipoDeuda?: string; monto?: number }
-export interface ConsultaSri { base: BaseSri; rubros: RubroSri[]; pagos: PagoSri[]; registrada?: string }
+/** Desglose de un valor pendiente (ConsultaComponente): impuesto, tasa, recargo, interés… por año fiscal. */
+export interface ComponentesSri { codigoRubro?: number; componentes: { codigoComponente?: string; anioFiscal?: number; valorComponente?: number }[] }
+/** Detalle de un pago (obtenerDetallesPago): qué rubro y de qué año se pagó. */
+export interface DetallePagoSri { fechaDePago?: string; detalle: { descripcionRubro?: string; descripcionComponente?: string; anio?: number; valor?: number }[] }
+export interface ExtraSri { componentes?: ComponentesSri[]; detallesPago?: DetallePagoSri[] }
+export interface ConsultaSri extends ExtraSri { base: BaseSri; rubros: RubroSri[]; pagos: PagoSri[]; registrada?: string }
 
 /** El 1 % de transferencia de dominio es el costo del traspaso, no una deuda de matrícula. */
 const esTraspaso = (r: RubroSri) => /TRANSF/i.test(`${r.codigoTipoDeuda ?? ''} ${r.descripcionRubro ?? ''}`)
@@ -83,8 +88,8 @@ export async function consultarSri(placa: string, pedir: Pedir = fetch, ms = 150
       const s = await conTiempo(pedir, `${servidor.replace(/\/+$/, '')}/placa/${placa}`, Math.max(ms, 25000))
       if (s.status === 404) throw new ErrorPlaca('no-existe', `El SRI no tiene registrada la placa ${placa}.`)
       if (s.ok) {
-        const j = (await s.json()) as { base?: BaseSri; rubros?: RubroSri[]; pagos?: PagoSri[]; registrada?: string }
-        if (j.base) return { base: j.base, rubros: j.rubros ?? [], pagos: j.pagos ?? [], registrada: j.registrada }
+        const j = (await s.json()) as Partial<ConsultaSri>
+        if (j.base) return { base: j.base, rubros: j.rubros ?? [], pagos: j.pagos ?? [], registrada: j.registrada, componentes: j.componentes ?? [], detallesPago: j.detallesPago ?? [] }
       }
     } catch (e) {
       if (e instanceof ErrorPlaca) throw e
@@ -152,11 +157,21 @@ export function normalizarBase(crudo: Record<string, unknown>): BaseSri {
     prohibidoEnajenar: buscar(/^prohibidoenajenar$/, /enajenar/),
     descripcionCanton: buscar(/^descripcioncanton$/, /canton/),
     fechaRevision: buscar(/^fecharevision$/, /revision/),
+    observacion: buscar(/^observacion$/),
   } as BaseSri
 }
 
+/** Datos técnicos que en la descripción del SRI siguen al nombre del modelo («1.6», «5P», «A/C», «TM», «4X2»…). */
+const TECNICO = /^(\d[.,]\d+L?|\d+P|A\/?C|TM|TA|T\/M|T\/A|M\/T|A\/T|4X[24]|CVT|STD|DLX|GL|GLS)$/i
+/** Modelo no catalogado: la descripción del SRI hasta el primer dato técnico, respetando códigos («TK 150-7», «F-370»). */
+export function modeloDeDescripcion(d: string): string {
+  const palabras: string[] = []
+  for (const w of d.trim().split(/\s+/).filter(Boolean)) { if (TECNICO.test(w)) break; palabras.push(w) }
+  return palabras.slice(0, 3).map((w) => (/\d/.test(w) || w.length <= 3 ? w.toUpperCase() : titulo(w))).join(' ')
+}
+
 /** Convierte la respuesta del SRI en hallazgos aplicables (fuente: SRI) y avisos para el vendedor. */
-export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[], pagos: PagoSri[] = [], registrada = placa): Investigacion {
+export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[], pagos: PagoSri[] = [], registrada = placa, extra: ExtraSri = {}): Investigacion {
   const base = normalizarBase(crudo as Record<string, unknown>)
   const fuente = { nombre: `SRI · placa ${registrada}`, url: urlBaseSri(registrada) }
   const h: Hallazgo[] = []
@@ -167,7 +182,7 @@ export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[]
   const marca = ALIAS_MARCA[marcaSri.toLowerCase()] ?? titulo(marcaSri)
   // El modelo del SRI suele traer versión y datos: «AVEO FAMILY AC 1.5 4P 4X2 TM» → se analiza igual que un texto libre
   const a = analizar(`${marca} ${base.descripcionModelo ?? ''}`).vehiculo
-  const modelo = a.modelo || titulo((base.descripcionModelo ?? '').split(/\s+/)[0])
+  const modelo = a.modelo || modeloDeDescripcion(base.descripcionModelo ?? '')
   add('marca', 'Marca', marca, marca)
   add('modelo', 'Modelo (SRI)', titulo(base.descripcionModelo), modelo)
   if (a.version) add('version', 'Versión', a.version, a.version)
@@ -203,17 +218,32 @@ export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[]
   const deuda = pendientes.reduce((s, r) => s + valor(r), 0)
   const pagado = String(base.ultimoAnioPagado ?? '').match(/\d{4}/)?.[0]
   if (pagado) add(null, 'Último año de matrícula pagado', pagado)
-  if (traspaso > 0) add(null, 'Valor del traspaso (1 % transferencia de dominio, lo calcula el SRI)', `$${traspaso.toFixed(2)}`)
+  // Desglose (ConsultaComponente): recargos e intereses por atraso dentro de lo pendiente
+  const comps = (extra.componentes ?? []).flatMap((c) => c.componentes ?? [])
+  const recargos = comps.filter((c) => /RECARGO|INTERES|MULTA/i.test(c.codigoComponente ?? '') && !/TRANSF/i.test(c.codigoComponente ?? ''))
+    .reduce((s2, c) => s2 + (+(c.valorComponente ?? 0) || 0), 0)
+  if (traspaso > 0) {
+    const aniosT = [...new Set(comps.filter((c) => /TRANSF/i.test(c.codigoComponente ?? '')).map((c) => c.anioFiscal).filter(Boolean))].sort().join('–')
+    avisos.push(`Transferencia de dominio por pagar en el SRI: $${traspaso.toFixed(2)}${aniosT ? ` (años ${aniosT})` : ''}. Es el 1 % del traspaso de propiedad, aparte de la matrícula.`)
+  }
+  // Detalle de pagos (obtenerDetallesPago): años de matrícula cubiertos por los pagos más recientes
+  const aniosPagados = [...new Set((extra.detallesPago ?? []).flatMap((d) => d.detalle ?? [])
+    .filter((x) => !/TRANSF/i.test(x.descripcionRubro ?? '')).map((x) => x.anio).filter(Boolean))].sort()
+  if (aniosPagados.length) add(null, 'Años de matrícula pagados (pagos recientes)', aniosPagados.join(', '))
   const ultimo = [...pagos].filter((p) => /MATR/i.test(p.tipoDeuda ?? '') && p.fechaDePago)
     .sort((x, y) => String(y.fechaDePago).localeCompare(String(x.fechaDePago)))[0]
   if (ultimo) add(null, 'Último pago de matrícula', `${String(ultimo.fechaDePago).slice(0, 10)}${ultimo.monto ? ` · $${(+ultimo.monto).toFixed(2)}` : ''}`)
   if (deuda > 0) {
-    const anios = [...new Set(pendientes.map((r) => r.anioHastaPago).filter(Boolean))].join(', ')
-    avisos.push(`Matrícula${anios ? ` ${anios}` : ''} pendiente en el SRI: $${deuda.toFixed(2)} (${[...new Set(pendientes.map((r) => titulo(r.descripcionRubro)))].join(', ')}). No se publicará «matrícula al día».`)
+    // Rango completo de años adeudados («2017–2026»), no solo el último
+    const desde = Math.min(...pendientes.map((r) => +(r.anioDesdePago ?? r.anioHastaPago ?? 0) || Infinity))
+    const hasta = Math.max(...pendientes.map((r) => +(r.anioHastaPago ?? 0) || 0))
+    const anios = hasta ? (Number.isFinite(desde) && desde < hasta ? `${desde}–${hasta}` : String(hasta)) : ''
+    avisos.push(`Matrícula${anios ? ` ${anios}` : ''} pendiente en el SRI: $${deuda.toFixed(2)} (${[...new Set(pendientes.map((r) => titulo(r.descripcionRubro)))].join(', ')})${recargos > 0 ? `, incluye $${recargos.toFixed(2)} de recargos e intereses por atraso` : ''}. No se publicará «matrícula al día».`)
   } else if (pagado) {
     add('matricula', 'Matrícula', `Último año pagado: ${pagado}, sin valores pendientes en el SRI`, `Al día ${pagado}`)
   }
   if (base.fechaCaducidadMatricula) add(null, 'Matrícula vigente hasta', base.fechaCaducidadMatricula.slice(0, 10))
+  if (base.observacion) add(null, 'Observación del SRI', String(base.observacion).trim())
   if (/^(s|si|sí)$/i.test((base.prohibidoEnajenar ?? '').trim()))
     avisos.push('⚠️ El SRI registra prohibición de enajenar: revisa la situación legal antes de publicar.')
   return { resumen: '', hallazgos: h, avisos, fuentes: [fuente] }

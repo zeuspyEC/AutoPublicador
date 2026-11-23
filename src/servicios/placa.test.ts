@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { consultarSri, interpretarPegado, interpretarSri, normalizarPlaca, placaValida, resumenDePlaca, type BaseSri } from './placa'
+import { consultarSri, interpretarPegado, interpretarSri, normalizarPlaca, placaValida, resumenDePlaca, type BaseSri, modeloDeDescripcion } from './placa'
 import { analizar } from '../dominio/analizador'
 import { descripciones, titulos } from '../dominio/plantillas'
 import { BENEFICIOS_PREDETERMINADOS } from '../dominio/tipos'
@@ -184,7 +184,7 @@ describe('placa: respuesta real del SRI', () => {
     const r = interpretarSri('PBA1234', REAL, [TRASPASO])
     expect(campo(r, 'matricula')[0].opciones).toEqual(['Al día 2026'])
     expect(r.avisos.join(' ')).not.toMatch(/pendiente/)
-    expect(r.hallazgos.find((h) => h.etiqueta.startsWith('Valor del traspaso'))?.valor).toBe('$14.75')
+    expect(r.avisos.join(' ')).toMatch(/Transferencia de dominio por pagar en el SRI: \$14\.75/)
   })
   it('matrícula del año pendiente: aviso con años y total, sin «al día»', () => {
     const r = interpretarSri('PBA1234', { ...REAL, ultimoAnioPagado: 2025 } as BaseSri, [TRASPASO,
@@ -214,5 +214,58 @@ describe('placa: respuesta real del SRI', () => {
       { fechaDePago: '2025-01-01 10:00', tipoDeuda: 'PAGO DEL VALOR DE TRANSFERENCIA DE DOMINIO', monto: 12 }], 'PJM0343')
     expect(r.hallazgos.find((h) => h.etiqueta === 'Último pago de matrícula')?.valor).toBe('2024-04-08 · $69.85')
     expect(r.fuentes[0].nombre).toBe('SRI · placa PJM0343')
+  })
+})
+
+describe('placa: desglose y detalle de pagos (ConsultaComponente y obtenerDetallesPago, forma real)', () => {
+  const RUBROS = [
+    { codigoRubro: 1, codigoTipoDeuda: 'MATRICULA', descripcionRubro: 'TASA SPPAT', valorRubro: 41.83, anioHastaPago: 2026 },
+    { codigoRubro: 2, codigoTipoDeuda: 'TRANSF_DOM', descripcionRubro: '1% TRANSFERENCIA DE DOMINIO', valorRubro: 79.71, anioHastaPago: 2026 },
+  ]
+  const EXTRA = {
+    componentes: [
+      { codigoRubro: 1, componentes: [{ codigoComponente: 'TASA', anioFiscal: 2026, valorComponente: 28.85 }, { codigoComponente: 'RECARGO', anioFiscal: 2026, valorComponente: 12.98 }] },
+      { codigoRubro: 2, componentes: [{ codigoComponente: 'TRANSF_DOM', anioFiscal: 2025, valorComponente: 30 }, { codigoComponente: 'TRANSF_DOM', anioFiscal: 2026, valorComponente: 11.89 }] },
+    ],
+    detallesPago: [
+      { fechaDePago: '2025-02-17 04:25', detalle: [{ descripcionRubro: 'TASAS ANT', anio: 2024, valor: 36 }, { descripcionRubro: 'TASAS ANT', anio: 2025, valor: 36 }] },
+      { fechaDePago: '2025-02-17 04:25', detalle: [{ descripcionRubro: '1% TRANSFERENCIA DE DOMINIO', anio: 2025, valor: 11.89 }] },
+      { fechaDePago: '2023-08-30 11:56', detalle: [{ descripcionRubro: 'TASA SPPAT', anio: 2023, valor: 28.85 }] },
+    ],
+  }
+  it('informa recargos por atraso, años del traspaso pendiente y años de matrícula pagados', () => {
+    const r = interpretarSri('PBA1234', { ...REAL, ultimoAnioPagado: 2025 } as BaseSri, RUBROS, [], 'PBA1234', EXTRA)
+    const avisos = r.avisos.join(' ')
+    expect(avisos).toMatch(/Matrícula 2026 pendiente en el SRI: \$41\.83 \(Tasa Sppat\), incluye \$12\.98 de recargos e intereses por atraso/)
+    expect(avisos).toMatch(/Transferencia de dominio por pagar en el SRI: \$79\.71 \(años 2025–2026\)/)
+    expect(r.hallazgos.find((h) => h.etiqueta.startsWith('Años de matrícula pagados'))?.valor).toBe('2023, 2024, 2025')
+  })
+})
+
+describe('placa: descripciones reales de modelos del SRI (verificadas con placas reales)', () => {
+  const modeloDe = (marca: string, desc: string) => interpretarSri('PBA1234', { codigoVehiculo: 1, descripcionMarca: marca, descripcionModelo: desc, anioAuto: 2016 }, [])
+  const op = (r: ReturnType<typeof modeloDe>, c: string) => r.hallazgos.find((h) => h.campo === c)?.opciones?.[0]
+  it('«N200 VAN PASAJEROS 1.2L TM»: el código N200 no se «corrige» a N300', () => {
+    const r = modeloDe('CHEVROLET', 'N200 VAN PASAJEROS 1.2L TM')
+    expect(op(r, 'modelo')).toBe('N200')
+    expect(op(r, 'motor')).toBe('1.2')
+    expect(op(r, 'transmision')).toBe('Manual')
+  })
+  it('«LOGAN 1.6 M/T»: M/T es transmisión manual', () => {
+    expect(op(modeloDe('RENAULT', 'LOGAN 1.6 M/T'), 'transmision')).toBe('Manual')
+  })
+  it('«X-TRAIL SENSE CVT AC 2.5 5P 4X2 TA»: motor, caja, puertas, tracción y A/C', () => {
+    const r = modeloDe('NISSAN', 'X-TRAIL SENSE CVT AC 2.5 5P 4X2 TA')
+    expect([op(r, 'modelo'), op(r, 'motor'), op(r, 'transmision'), op(r, 'puertas'), op(r, 'traccion')]).toEqual(['X-Trail', '2.5', 'Automática', '5', '4X2'])
+  })
+  it('marca no catalogada «TUKO TK 150-7»: se conserva el modelo completo', () => {
+    expect(op(modeloDe('TUKO', 'TK 150-7'), 'modelo')).toBe('TK 150-7')
+    expect(modeloDeDescripcion('F-370')).toBe('F-370')
+  })
+  it('observación del SRI y rango completo de años adeudados', () => {
+    const r = interpretarSri('PBA1234', { ...REAL, ultimoAnioPagado: 2016, observacion: 'Vehículo acogido a la Disposición Transitoria Décima.' } as BaseSri,
+      [{ codigoTipoDeuda: 'MATRICULA', descripcionRubro: 'TASA SPPAT', valorRubro: 1066.11, anioDesdePago: 2017, anioHastaPago: 2026 }])
+    expect(r.hallazgos.find((h) => h.etiqueta === 'Observación del SRI')?.valor).toMatch(/Disposición Transitoria/)
+    expect(r.avisos.join(' ')).toMatch(/Matrícula 2017–2026 pendiente en el SRI: \$1066\.11/)
   })
 })
