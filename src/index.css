@@ -211,3 +211,7 @@ textarea.entrada { font-size: 1.05rem; }
 .diagnostico li { padding: .35rem .6rem; border-radius: 8px; background: var(--superficie-2); }
 .tarjeta-interna { background: var(--superficie-2); border-radius: 12px; padding: .7rem .8rem; margin-top: .6rem; }
 .chapa { display: inline-block; background: #fde047; color: #111827; border: 2px solid #111827; border-radius: 6px; padding: 0 .4rem; font-family: ui-monospace, Consolas, monospace; letter-spacing: .05em; margin-right: .3rem; }
+
+/* Varias placas: avance de la consulta por lotes */
+.lote { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; font-size: .95rem; }
+.lote li { line-height: 1.4; }

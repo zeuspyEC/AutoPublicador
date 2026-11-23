@@ -40,6 +40,8 @@ async function json(pedir: Pedir, url: string) {
   return r.json()
 }
 
+const FICHA_VEHICULO = /\{\{\s*(Ficha de automóvil|Ficha de vehículo|Ficha de motocicleta|Infobox automobile|Infobox car|Infobox motorcycle)/i
+
 /** Período de producción de la ficha del artículo (español o inglés). */
 function periodoDe(wikitexto: string): string {
   const f = camposFicha(wikitexto, ['Ficha de automóvil', 'Ficha de vehículo', 'Infobox automobile', 'Infobox car'])
@@ -69,6 +71,9 @@ async function articulo(pedir: Pedir, idioma: 'es' | 'en', consulta: string, mod
     const pagina = Object.values(r?.query?.pages ?? {})[0] as { title?: string; revisions?: { slots: { main: { '*': string } } }[] }
     const wikitexto = pagina?.revisions?.[0]?.slots?.main?.['*']
     if (!wikitexto) continue
+    // Solo artículos de vehículos (con ficha de automóvil o de motocicleta): «Nissan Infinity» no es el artículo
+    // matemático «Infinity»
+    if (!FICHA_VEHICULO.test(wikitexto)) continue
     const rangos = rangosAnios(periodoDe(wikitexto))
     const encaja = !anio || !rangos.length || rangos.some(([a, b]) => +anio >= a && +anio <= b)
     const tituloFinal = pagina.title ?? titulo
@@ -118,7 +123,14 @@ export async function investigarWikipedia(v: Vehiculo, pedir: Pedir = fetch): Pr
     add(null, 'Período de producción', f['período'] ?? f['periodo'] ?? f['producción'])
     add(null, 'Tipo', f['tipo'])
     const carr = f['carrocería']
-    add('carroceria', 'Carrocería', carr, carr ? carr.split(';').map((x) => x.trim()).filter(Boolean) : undefined)
+    let opcionesCarr = carr ? carr.split(';').map((x) => x.trim()).filter(Boolean) : undefined
+    // Con las puertas conocidas (p. ej., del SRI: «4P»), queda solo la carrocería que tiene esas puertas, si es una
+    if (opcionesCarr && v.puertas) {
+      const palabra = ({ 2: 'dos', 3: 'tres', 4: 'cuatro', 5: 'cinco' } as Record<string, string>)[v.puertas] ?? v.puertas
+      const conPuertas = opcionesCarr.filter((o) => new RegExp(`\\b(${v.puertas}|${palabra})\\b`, 'i').test(o))
+      if (conPuertas.length === 1) opcionesCarr = conPuertas
+    }
+    add('carroceria', 'Carrocería', carr, opcionesCarr)
     const conf = f['configuración']
     if (conf) add('traccion', 'Tracción', traccionDe(conf) || conf, traccionDe(conf) ? traccionDe(conf).split(' o ') : undefined)
     const trans = f['transmisión']

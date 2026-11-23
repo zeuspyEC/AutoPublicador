@@ -285,3 +285,11 @@ describe('placa: campos adicionales de la respuesta real', () => {
     expect(interpretarSri('PBA1234', REAL, []).avisos.join(' ')).not.toMatch(/EXONERADO/)
   })
 })
+
+describe('placa: carrocería escrita en el modelo registrado', () => {
+  it('«ALLEGRO SEDAN 1.6»: carrocería Sedán y sin versión «Sedán Sedán»', () => {
+    const r = interpretarSri('PBA1234', { codigoVehiculo: 1, descripcionMarca: 'MAZDA', descripcionModelo: 'ALLEGRO SEDAN 1.6', anioAuto: 2004 }, [])
+    expect(r.hallazgos.find((h) => h.campo === 'carroceria')?.opciones).toEqual(['Sedán'])
+    expect(r.hallazgos.find((h) => h.campo === 'version')).toBeUndefined()
+  })
+})

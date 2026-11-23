@@ -11,6 +11,7 @@ export interface Publicacion {
   origenes: Origenes
   titulo: string
   descripcion: string
+  placa?: string // si se creó desde una placa (consulta individual o «Varias placas»)
 }
 
 /** Placa consultada en el SRI: se guarda para reutilizarla sin volver a consultar. */

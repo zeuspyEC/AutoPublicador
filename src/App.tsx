@@ -243,6 +243,7 @@ export default function App() {
 
         {vista === 'historial' && (
           <Historial lista={historial} placas={placas} abrir={abrir} usarPlaca={usarPlaca}
+            perfil={perfil} ajustes={ajustes} refrescar={() => { setHistorial(almacen.historial()); setPlacas(almacen.placas()) }}
             borrar={(id) => { almacen.borrarDeHistorial(id); setHistorial(almacen.historial()) }}
             borrarPlaca={(pl) => { almacen.borrarPlaca(pl); setPlacas(almacen.placas()) }} />
         )}
@@ -300,7 +301,7 @@ export default function App() {
                   <h2><span className="numero">4</span> Publicación lista</h2>
                   <Resultados v={v} titulos={titulos} descripciones={descripciones} comentarios={comentarios}
                     alGuardar={(titulo, descripcion) => {
-                      almacen.guardarEnHistorial({ id: idPublicacion, fecha: new Date().toISOString(), texto, vehiculo: v, origenes, titulo, descripcion })
+                      almacen.guardarEnHistorial({ id: idPublicacion, fecha: new Date().toISOString(), texto, vehiculo: v, origenes, titulo, descripcion, placa: placaConsultada || undefined })
                       setHistorial(almacen.historial())
                     }} />
                 </section>

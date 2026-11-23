@@ -161,7 +161,10 @@ export function analizar(texto: string): Analisis {
   const versiones = VERSIONES.filter((ver) => new RegExp(`(^|[^a-z0-9])${escapar(sinTildes(ver.toLowerCase()))}([^a-z0-9]|$)`).test(plano))
     .filter((ver) => !sinTildes(modelo.toLowerCase()).split(' ').includes(sinTildes(ver.toLowerCase())))
     .filter((ver) => ver !== 'Full' || !/full equip/.test(plano))
-  if (versiones.length) poner('version', versiones.map((x) => (x === 'Sedan' ? 'Sedán' : x === 'Clasico' ? 'Clásico' : x)).join(' '))
+  // «Sedán»/«Hatchback» son carrocería (ya se tomó arriba), no versión; y sin repetir variantes con o sin tilde
+  const ver = [...new Set(versiones.filter((x) => !/^(sedan|sedán|hatchback)$/i.test(x))
+    .map((x) => (x === 'Clasico' ? 'Clásico' : x)))]
+  if (ver.length) poner('version', ver.join(' '))
 
   // --- Equipamiento y estado ---
   for (const [re, nombre] of EQUIPAMIENTO) if (re.test(t) && !v.equipamiento.includes(nombre)) v.equipamiento.push(nombre)

@@ -50,4 +50,13 @@ describe.runIf(activa)('investigación real en Wikipedia', () => {
     const r = await investigarWikipedia(vehiculo)
     expect(r.fuentes[0]?.url).toContain('Chevrolet_Aveo')
   }, 30000)
+  it('Nissan Infinity 1999 (así lo registra el SRI): no toma el artículo matemático «Infinity»', async () => {
+    const r = await investigarWikipedia(analizar('Nissan Infinity 1999').vehiculo)
+    expect(r.fuentes.map((f) => f.nombre).join(' ')).not.toMatch(/: Infinity$/)
+    expect(r.hallazgos).toEqual([])
+  }, 30000)
+  it('Chevrolet Corsa Evolution 4P (SRI): con 4 puertas la carrocería es Sedán', async () => {
+    const r = await investigarWikipedia({ ...analizar('Chevrolet Corsa Evolution 2004').vehiculo, puertas: '4' })
+    expect(r.hallazgos.find((h) => h.campo === 'carroceria')?.opciones).toEqual(['Sedán cuatro puertas'])
+  }, 30000)
 })

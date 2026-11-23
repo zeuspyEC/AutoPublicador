@@ -1,5 +1,7 @@
 import type { PlacaConsultada, Publicacion } from '../servicios/almacen'
 import { Copiar } from './Copiar'
+import { VariasPlacas } from './VariasPlacas'
+import type { Ajustes, Perfil } from '../dominio/tipos'
 
 interface Props {
   lista: Publicacion[]
@@ -8,13 +10,17 @@ interface Props {
   borrar: (id: string) => void
   usarPlaca: (p: PlacaConsultada) => void
   borrarPlaca: (placa: string) => void
+  perfil: Perfil | null
+  ajustes: Ajustes
+  refrescar: () => void
 }
 
 const fecha = (iso: string) => new Date(iso).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' })
 
-export function Historial({ lista, placas, abrir, borrar, usarPlaca, borrarPlaca }: Props) {
+export function Historial({ lista, placas, abrir, borrar, usarPlaca, borrarPlaca, perfil, ajustes, refrescar }: Props) {
   return (
     <div className="ajustes">
+      {perfil && <VariasPlacas perfil={perfil} ajustes={ajustes} alGuardar={refrescar} />}
       <section className="tarjeta">
         <h2>Publicaciones guardadas</h2>
         {!lista.length && <p className="vacio">Todavía no has guardado publicaciones. Genera una y pulsa «Guardar en el historial».</p>}
@@ -22,7 +28,7 @@ export function Historial({ lista, placas, abrir, borrar, usarPlaca, borrarPlaca
           {lista.map((p) => (
             <li key={p.id} className="tarjeta">
               <div className="cabecera-historial">
-                <strong>{p.titulo}</strong>
+                <strong>{p.placa && <><span className="chapa">{p.placa}</span> </>}{p.titulo}</strong>
                 <small>{fecha(p.fecha)}</small>
               </div>
               <div className="fila">
