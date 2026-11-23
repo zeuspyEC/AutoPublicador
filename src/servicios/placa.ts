@@ -223,8 +223,9 @@ export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[]
   const recargos = comps.filter((c) => /RECARGO|INTERES|MULTA/i.test(c.codigoComponente ?? '') && !/TRANSF/i.test(c.codigoComponente ?? ''))
     .reduce((s2, c) => s2 + (+(c.valorComponente ?? 0) || 0), 0)
   if (traspaso > 0) {
-    const aniosT = [...new Set(comps.filter((c) => /TRANSF/i.test(c.codigoComponente ?? '')).map((c) => c.anioFiscal).filter(Boolean))].sort().join('–')
-    avisos.push(`Transferencia de dominio por pagar en el SRI: $${traspaso.toFixed(2)}${aniosT ? ` (años ${aniosT})` : ''}. Es el 1 % del traspaso de propiedad, aparte de la matrícula.`)
+    const aT = [...new Set(comps.filter((c) => /TRANSF/i.test(c.codigoComponente ?? '')).map((c) => +(c.anioFiscal ?? 0)).filter(Boolean))].sort()
+    const aniosT = aT.length > 1 ? `años ${aT[0]}–${aT[aT.length - 1]}` : aT.length ? `año ${aT[0]}` : ''
+    avisos.push(`Transferencia de dominio por pagar en el SRI: $${traspaso.toFixed(2)}${aniosT ? ` (${aniosT})` : ''}. Es el 1 % del traspaso de propiedad, aparte de la matrícula.`)
   }
   // Detalle de pagos (obtenerDetallesPago): años de matrícula cubiertos por los pagos más recientes
   const aniosPagados = [...new Set((extra.detallesPago ?? []).flatMap((d) => d.detalle ?? [])
