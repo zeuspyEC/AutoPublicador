@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BENEFICIOS_PREDETERMINADOS, UBICACION_PREDETERMINADA, type Ajustes as TAjustes, type Perfil } from '../dominio/tipos'
 import { diagnosticar, olvidarModelos, type Diagnostico } from '../servicios/google'
+import { SERVIDOR_PLACAS } from '../servicios/placa'
 import { FormPerfil } from './FormPerfil'
 
 interface Props {
@@ -16,6 +17,8 @@ export function Ajustes({ perfil, ajustes, guardarPerfil, guardarAjustes, borrar
   const [clave, setClave] = useState(ajustes.claveGemini)
   const [perfilOk, setPerfilOk] = useState(false)
   const [probando, setProbando] = useState(false)
+  const [servidor, setServidor] = useState(ajustes.servidorPlacas)
+  const [servidorOk, setServidorOk] = useState('')
   const [diag, setDiag] = useState<Diagnostico | null>(null)
   const set = (a: Partial<TAjustes>) => guardarAjustes({ ...ajustes, ...a })
 
@@ -105,6 +108,31 @@ export function Ajustes({ perfil, ajustes, guardarPerfil, guardarAjustes, borrar
             )}
           </>
         )}
+      </section>
+
+      <section className="tarjeta">
+        <h2>Servidor de placas</h2>
+        <p className="ayuda">
+          El SRI no deja que otras páginas lean sus datos directamente desde el navegador. El servidor de placas (carpeta
+          {' '}<code>servidor</code> del repositorio) los consulta y se los entrega a la app. Si no hay servidor, la app intenta
+          directo y, si no puede, ofrece la consulta manual.
+        </p>
+        <form className="fila" onSubmit={(e) => { e.preventDefault(); setServidorOk(''); set({ servidorPlacas: servidor.trim().replace(/\/+$/, '') }) }}>
+          <input value={servidor} onChange={(e) => setServidor(e.target.value)} placeholder={SERVIDOR_PLACAS || 'https://autopublicador-placas.TU-CUENTA.workers.dev'} inputMode="url" autoComplete="off" />
+          <button className="boton secundario" type="submit">Guardar</button>
+        </form>
+        <div className="fila">
+          <button type="button" className="boton secundario" onClick={async () => {
+            const url = (ajustes.servidorPlacas || SERVIDOR_PLACAS).replace(/\/+$/, '')
+            if (!url) { setServidorOk('No hay servidor configurado.'); return }
+            setServidorOk('Probando…')
+            try {
+              const r = await fetch(url + '/salud')
+              setServidorOk(r.ok ? '✅ El servidor responde.' : `❌ El servidor respondió ${r.status}.`)
+            } catch { setServidorOk('❌ No se pudo conectar con el servidor (revisa la dirección).') }
+          }}>Probar servidor</button>
+          {servidorOk && <span>{servidorOk}</span>}
+        </div>
       </section>
 
       <section className="tarjeta peligro">

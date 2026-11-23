@@ -49,6 +49,7 @@ export interface Beneficio {
 export interface Ajustes {
   beneficios: Beneficio[]
   claveGemini: string // opcional: investigación en Google con Gemini (se guarda solo en este navegador)
+  servidorPlacas: string // opcional: URL del servidor de placas propio (carpeta /servidor); vacío = el predeterminado
   ubicacion: string
 }
 

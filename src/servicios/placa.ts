@@ -62,7 +62,27 @@ export class ErrorPlaca extends Error {
 }
 
 /** Consulta directa al SRI desde el navegador. Lanza ErrorPlaca('sin-acceso') si el navegador no puede llegar. */
-export async function consultarSri(placa: string, pedir: Pedir = fetch, ms = 15000): Promise<{ base: BaseSri; rubros: RubroSri[] }> {
+/** Servidor de placas publicado (Cloudflare Worker de la carpeta /servidor). Vacío = aún no desplegado. */
+export const SERVIDOR_PLACAS = ''
+
+/**
+ * Consulta por placa: 1) servidor propio (si está configurado) → 2) SRI directo desde el navegador → 3) error
+ * «sin-acceso» para que la interfaz ofrezca la consulta manual. Nunca se queda sin camino.
+ */
+export async function consultarSri(placa: string, pedir: Pedir = fetch, ms = 15000, servidor = SERVIDOR_PLACAS): Promise<{ base: BaseSri; rubros: RubroSri[] }> {
+  if (servidor) {
+    try {
+      const s = await conTiempo(pedir, `${servidor.replace(/\/+$/, '')}/placa/${placa}`, Math.max(ms, 25000))
+      if (s.status === 404) throw new ErrorPlaca('no-existe', `El SRI no tiene registrada la placa ${placa}.`)
+      if (s.ok) {
+        const j = (await s.json()) as { base?: BaseSri; rubros?: RubroSri[] }
+        if (j.base) return { base: j.base, rubros: j.rubros ?? [] }
+      }
+    } catch (e) {
+      if (e instanceof ErrorPlaca) throw e
+      // servidor caído: se intenta directo
+    }
+  }
   let r: Response
   try { r = await conTiempo(pedir, urlBaseSri(placa), ms) } catch {
     // Diagnóstico: con «no-cors» el navegador sí deja hacer la petición (sin leerla). Si así responde, el SRI está

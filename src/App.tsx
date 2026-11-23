@@ -4,7 +4,7 @@ import { comentarios as generarComentarios, descripciones as generarDescripcione
 import { VEHICULO_VACIO, type Ajustes as TAjustes, type Origen, type Origenes, type Perfil, type Vehiculo } from './dominio/tipos'
 import { almacen, type PlacaConsultada, type Publicacion } from './servicios/almacen'
 import { investigarGoogle, investigarTextoPegado, investigarWikipedia, type Hallazgo, type Investigacion } from './servicios/investigador'
-import { consultarSri, ErrorPlaca, interpretarPegado, interpretarSri, normalizarPlaca, placaValida, resumenDePlaca } from './servicios/placa'
+import { consultarSri, ErrorPlaca, interpretarPegado, interpretarSri, normalizarPlaca, placaValida, resumenDePlaca, SERVIDOR_PLACAS } from './servicios/placa'
 import { Ajustes } from './componentes/Ajustes'
 import { FormPerfil } from './componentes/FormPerfil'
 import { FormVehiculo } from './componentes/FormVehiculo'
@@ -112,7 +112,7 @@ export default function App() {
   async function buscarPlaca(p: string, n: number) {
     setSri({ estado: 'buscando' })
     try {
-      const { base, rubros } = await consultarSri(p)
+      const { base, rubros } = await consultarSri(p, fetch, 15000, ajustes.servidorPlacas || SERVIDOR_PLACAS)
       if (n !== ronda.current) return
       const r = interpretarSri(p, base, rubros)
       setSri({ estado: 'listo', resultado: r })

@@ -150,3 +150,25 @@ describe('placa: lectura tolerante de la respuesta', () => {
     expect(campo(r, 'color')).toEqual([])
   })
 })
+
+describe('placa: servidor propio', () => {
+  it('usa el servidor si está configurado', async () => {
+    const urls: string[] = []
+    const r = await consultarSri('PBA1234', async (url) => { urls.push(url); return new Response(JSON.stringify({ placa: 'PBA1234', base: BASE, rubros: [] })) }, 15000, 'https://placas.ejemplo.workers.dev/')
+    expect(urls).toEqual(['https://placas.ejemplo.workers.dev/placa/PBA1234'])
+    expect(r.base.descripcionModelo).toBe(BASE.descripcionModelo)
+  })
+  it('placa no registrada según el servidor → no-existe (sin reintentos)', async () => {
+    await expect(consultarSri('PBA1234', async () => new Response('{"error":"x"}', { status: 404 }), 15000, 'https://s.dev')).rejects.toMatchObject({ tipo: 'no-existe' })
+  })
+  it('si el servidor no responde, intenta directo con el SRI', async () => {
+    const urls: string[] = []
+    const r = await consultarSri('PBA1234', async (url) => {
+      urls.push(url)
+      if (url.startsWith('https://s.dev')) throw new TypeError('Failed to fetch')
+      return new Response(JSON.stringify(url.includes('BaseVehiculo') ? BASE : []))
+    }, 15000, 'https://s.dev')
+    expect(urls[1]).toContain('srienlinea.sri.gob.ec')
+    expect(r.base.descripcionMarca).toBe('CHEVROLET')
+  })
+})

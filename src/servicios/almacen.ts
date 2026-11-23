@@ -36,7 +36,7 @@ export const almacen = {
 
   ajustes: (): Ajustes => {
     const a = leer<Partial<Ajustes>>(CLAVES.ajustes) ?? {}
-    return { beneficios: a.beneficios ?? BENEFICIOS_PREDETERMINADOS, claveGemini: a.claveGemini ?? '', ubicacion: a.ubicacion || UBICACION_PREDETERMINADA }
+    return { beneficios: a.beneficios ?? BENEFICIOS_PREDETERMINADOS, claveGemini: a.claveGemini ?? '', ubicacion: a.ubicacion || UBICACION_PREDETERMINADA, servidorPlacas: a.servidorPlacas ?? '' }
   },
   guardarAjustes: (a: Ajustes) => escribir(CLAVES.ajustes, a),
 
