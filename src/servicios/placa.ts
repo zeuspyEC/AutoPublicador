@@ -43,10 +43,12 @@ export function placaValida(p: string): boolean {
 export const urlBaseSri = (placa: string) => `${SRI_REST}/BaseVehiculo/obtenerPorNumeroPlacaOPorNumeroCampvOPorNumeroCpn?numeroPlacaCampvCpn=${placa}`
 const urlRubrosSri = (codigo: number) => `${SRI_REST}/ConsultaRubros/obtenerPorCodigoVehiculo?codigoVehiculo=${codigo}`
 
-async function conTiempo(pedir: Pedir, url: string, ms: number) {
+async function conTiempo(pedir: Pedir, url: string, ms: number, mode: RequestMode = 'cors') {
   const c = new AbortController()
   const t = setTimeout(() => c.abort(), ms)
-  try { return await pedir(url, { signal: c.signal, headers: { Accept: 'application/json' } }) } finally { clearTimeout(t) }
+  try {
+    return await pedir(url, mode === 'cors' ? { signal: c.signal, headers: { Accept: 'application/json' } } : { signal: c.signal, mode })
+  } finally { clearTimeout(t) }
 }
 
 export class ErrorPlaca extends Error {
@@ -61,7 +63,12 @@ export class ErrorPlaca extends Error {
 export async function consultarSri(placa: string, pedir: Pedir = fetch, ms = 15000): Promise<{ base: BaseSri; rubros: RubroSri[] }> {
   let r: Response
   try { r = await conTiempo(pedir, urlBaseSri(placa), ms) } catch {
-    throw new ErrorPlaca('sin-acceso', 'El navegador no pudo consultar el SRI directamente (servicio caído o no permite consultas desde otras páginas).')
+    // Diagnóstico: con «no-cors» el navegador sí deja hacer la petición (sin leerla). Si así responde, el SRI está
+    // disponible y lo que bloquea es la política del navegador (CORS); si tampoco responde, es la red o el SRI.
+    const responde = await conTiempo(pedir, urlBaseSri(placa), Math.min(ms, 10000), 'no-cors').then(() => true, () => false)
+    throw new ErrorPlaca('sin-acceso', responde
+      ? 'El SRI respondió, pero no permite que otras páginas lean sus datos directamente (política del navegador). Usa la consulta manual de abajo: son dos toques.'
+      : 'El SRI no respondió desde tu conexión (filtra algunas redes). Prueba con datos móviles o usa la consulta manual de abajo.')
   }
   if (!r.ok) throw new ErrorPlaca(r.status === 404 ? 'no-existe' : 'otro', r.status === 404 ? `El SRI no tiene registrada la placa ${placa}.` : `El SRI respondió ${r.status}.`)
   const base = (await r.json().catch(() => null)) as BaseSri | null
@@ -75,7 +82,8 @@ export async function consultarSri(placa: string, pedir: Pedir = fetch, ms = 150
 }
 
 const titulo = (s?: string) => (s ?? '').toLowerCase().replace(/(^|\s|-)(\p{L})/gu, (_, a, b) => a + b.toUpperCase()).trim()
-const CLASES: Record<string, string> = { JEEP: 'SUV', CAMIONETA: 'Camioneta', 'VEHICULO UTILITARIO': 'SUV', FURGONETA: 'Furgoneta', AUTOMOVIL: '', AUTOMÓVIL: '' }
+const CLASES: Record<string, string> = { JEEP: 'SUV', CAMIONETA: 'Camioneta', 'VEHICULO UTILITARIO': 'SUV', FURGONETA: 'Furgoneta', AUTOMOVIL: '', AUTOMÓVIL: '',
+  MOTOCICLETA: 'Moto', MOTO: 'Moto', CUADRON: 'Cuadrón', 'CUADRÓN': 'Cuadrón', TRICIMOTO: 'Tricimoto' }
 
 /** Convierte la respuesta del SRI en hallazgos aplicables (fuente: SRI) y avisos para el vendedor. */
 export function interpretarSri(placa: string, base: BaseSri, rubros: RubroSri[]): Investigacion {
@@ -95,7 +103,9 @@ export function interpretarSri(placa: string, base: BaseSri, rubros: RubroSri[])
   const anio = String(base.anioAuto ?? '').match(/\d{4}/)?.[0]
   add('anio', 'Año', anio, anio)
   const cc = +String(base.cilindraje ?? '').replace(/\D/g, '')
-  if (cc > 400) add('motor', 'Cilindraje', `${cc} cc`, (Math.round(cc / 100) / 10).toFixed(1))
+  const esMoto = /MOTO|CUADR|TRICI/i.test(base.nombreClase ?? '')
+  // Autos: litros («1498 cc» → 1.5); motos: cilindraje en cc («150 cc»)
+  if (cc > 0) add('motor', 'Cilindraje', `${cc} cc`, esMoto || cc < 600 ? `${cc} cc` : (Math.round(cc / 100) / 10).toFixed(1))
   if (a.transmision) add('transmision', 'Transmisión', a.transmision, a.transmision)
   if (a.puertas) add('puertas', 'Puertas', a.puertas, a.puertas)
   if (a.traccion) add('traccion', 'Tracción', a.traccion, a.traccion)
@@ -155,4 +165,10 @@ export function interpretarPegado(placa: string, texto: string): Investigacion |
   }
   if (!base.descripcionMarca && !base.descripcionModelo) return null
   return interpretarSri(placa, base, [])
+}
+
+/** Resumen legible de una consulta para el historial de placas: «Chevrolet Aveo Family 2015 · Plateado». */
+export function resumenDePlaca(r: Investigacion): string {
+  const op = (c: string) => r.hallazgos.find((h) => h.campo === c)?.opciones?.[0] ?? ''
+  return [[op('marca'), op('modelo'), op('anio')].filter(Boolean).join(' '), op('color')].filter(Boolean).join(' · ')
 }

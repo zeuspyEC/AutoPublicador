@@ -31,6 +31,15 @@ export const MODELOS: Record<string, string[]> = {
   Subaru: ['Forester', 'Impreza', 'XV', 'Outback', 'Legacy'],
   Isuzu: ['D-Max', 'Rodeo', 'Trooper', 'Amigo'],
   Dodge: ['Journey', 'Durango', 'Caliber', 'Ram'],
+  // Motos frecuentes en Ecuador
+  Yamaha: ['FZ', 'FZ25', 'YBR', 'XTZ', 'MT-03', 'MT-09', 'R15', 'Crypton', 'BWS'],
+  Bajaj: ['Pulsar', 'Discover', 'Boxer', 'Dominar', 'Platina', 'Avenger'],
+  Kawasaki: ['Ninja', 'KLX', 'Z400', 'Z900', 'Versys'],
+  TVS: ['Apache', 'Ntorq', 'Raider', 'Sport'],
+  Shineray: ['XY150', 'XY200', 'Explorer'],
+  KTM: ['Duke', 'RC', 'Adventure'],
+  Hero: ['Hunk', 'Ignitor', 'Eco Deluxe'],
+  Daytona: ['Tiger', 'Scorpion', 'Wing'],
 }
 
 /** Alias en el texto → marca oficial. */
@@ -41,6 +50,7 @@ export const ALIAS_MARCA: Record<string, string> = {
   mitsubishi: 'Mitsubishi', honda: 'Honda', 'great wall': 'Great Wall', greatwall: 'Great Wall', chery: 'Chery',
   jac: 'JAC', daewoo: 'Daewoo', citroen: 'Citroën', jeep: 'Jeep', byd: 'BYD', dfsk: 'DFSK', skoda: 'Skoda',
   subaru: 'Subaru', isuzu: 'Isuzu', dodge: 'Dodge',
+  yamaha: 'Yamaha', bajaj: 'Bajaj', kawasaki: 'Kawasaki', tvs: 'TVS', shineray: 'Shineray', ktm: 'KTM', hero: 'Hero', daytona: 'Daytona',
 }
 
 /** Cuando el texto trae solo el modelo: marca más probable en Ecuador (p. ej., «Vitara» → Chevrolet). */

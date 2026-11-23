@@ -77,7 +77,9 @@ export function analizar(texto: string): Analisis {
 
   // --- Motor ---
   const motor = t.match(/\b(\d)[.,](\d)\s*(?:l|lt|lts|litros?|cc|t|turbo)?\b/) || t.match(/\b(\d)(\d)\d\d\s*(?:cc|c\.c\.)/)
+  const motoCc = !motor && t.match(/\b(\d{2,3})\s*(?:cc|c\.c\.)/) // motos: «150cc», «200 cc»
   if (motor) { poner('motor', `${motor[1]}.${motor[2]}`); t = t.replace(motor[0], ' ') }
+  else if (motoCc) { poner('motor', `${motoCc[1]} cc`); t = t.replace(motoCc[0], ' ') }
 
   // --- Año: 4 dígitos, o «año 92», «del 98», «modelo 08» ---
   const anio4 = t.match(/\b(19[5-9]\d|20[0-3]\d)\b/)

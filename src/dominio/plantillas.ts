@@ -32,7 +32,8 @@ const capitalizar = (s: string) => s.replace(/(^|\s)(\p{L})/gu, (_, a, b) => a +
 function nombreVehiculo(v: Vehiculo, conVersion = true): string {
   return limpiar([v.marca, v.modelo, conVersion ? v.version : ''].join(' '))
 }
-function motorL(v: Vehiculo) { return v.motor ? `${v.motor}L` : '' }
+/** «1.6» → «1.6L»; en motos el cilindraje va en cc («150 cc») y se deja igual. */
+function motorL(v: Vehiculo) { return v.motor ? (/cc$/i.test(v.motor) ? v.motor : `${v.motor}L`) : '' }
 function anioCorto(v: Vehiculo) { return v.anio ? v.anio.slice(2) : '' }
 function matriculaCorta(v: Vehiculo) { return v.matricula ? mayus(v.matricula) : '' }
 function transmision(v: Vehiculo) { return v.transmision ? mayus(v.transmision) : '' }
@@ -48,6 +49,7 @@ function activos(c: Contexto) { return c.beneficios.filter((b) => b.activo).map(
 /** Frase de uso según la carrocería (para el párrafo inicial). */
 function idealPara(v: Vehiculo): string {
   const c = v.carroceria.toLowerCase()
+  if (/moto|cuadr|trici/.test(c)) return 'moverse ágil y económico por la ciudad'
   if (/camioneta|pickup|4x4/.test(c) || /4X4/.test(v.traccion)) return 'trabajo, ciudad y campo'
   if (/suv|jeep/.test(c)) return 'la familia, la ciudad y las salidas de fin de semana'
   if (/hatchback/.test(c)) return 'moverse en la ciudad de forma económica'
