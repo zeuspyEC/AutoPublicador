@@ -94,8 +94,9 @@ export function analizar(texto: string): Analisis {
   }
 
   // --- Transmisión y combustible ---
-  if (/\b(autom[aá]tic[oa]|a\/t|tiptronic|cvt|caja autom)/.test(t)) poner('transmision', 'Automática')
-  else if (/\b(manual|mec[aá]nic[oa]|t\/m|est[aá]ndar|sincr[oó]nic)/.test(t) && !/mec[aá]nico de confianza|tu mec[aá]nico/.test(t)) poner('transmision', 'Manual')
+  // «TM» / «TA»: abreviaturas del SRI y de muchos vendedores (transmisión manual / automática)
+  if (/\b(autom[aá]tic[oa]|a\/t|tiptronic|cvt|caja autom)|\bta\b/.test(t)) poner('transmision', 'Automática')
+  else if (/\b(manual|mec[aá]nic[oa]|t\/m|est[aá]ndar|sincr[oó]nic)|\btm\b/.test(t) && !/mec[aá]nico de confianza|tu mec[aá]nico/.test(t)) poner('transmision', 'Manual')
   const comb = plano.match(/\b(gasolina|diesel|hibrido|electrico|glp|gnv)\b/)
   if (comb) poner('combustible', { gasolina: 'Gasolina', diesel: 'Diésel', hibrido: 'Híbrido', electrico: 'Eléctrico', glp: 'GLP', gnv: 'GNV' }[comb[1]]!)
 

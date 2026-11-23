@@ -67,7 +67,7 @@ export const EQUIPAMIENTO: [RegExp, string][] = [
   [/\b(techo corredizo|techo solar|sunroof|quemacocos|techo panor[aá]mico)\b|\btecho\b/, 'Techo corredizo'],
   [/\b(pantalla|radio android|android auto|carplay|radio t[aá]ctil|radio touch)\b/, 'Pantalla Android'],
   [/\bc[aá]mara\b/, 'Cámara de retro'],
-  [/\b(aire acondicionado|a\/a|a\/c|aire|climatizador)\b/, 'Aire acondicionado'],
+  [/\b(aire acondicionado|a\/a|a\/c|aire|climatizador|ac)\b/, 'Aire acondicionado'],
   [/\baros\b|\brines\b/, 'Aros deportivos'],
   [/\bsensor(es)?\b/, 'Sensores de parqueo'],
   [/\b(vidrios el[eé]ctricos|alzavidrios)\b/, 'Vidrios eléctricos'],

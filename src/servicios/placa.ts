@@ -1,0 +1,154 @@
+// Consulta por placa en el servicio público del SRI (el mismo que usa ECPlacas: BaseVehiculo + ConsultaRubros).
+// Solo se usan datos del VEHÍCULO (marca, modelo, año, cilindraje, color, clase, matrícula, valores pendientes);
+// nunca datos del propietario. Si el navegador no puede consultar el SRI directamente (CORS o servicio caído),
+// el vendedor abre la consulta en el SRI y pega el resultado: se interpreta igual (JSON o texto).
+import { analizar } from '../dominio/analizador'
+import { ALIAS_MARCA } from '../dominio/catalogo'
+import type { Hallazgo, Investigacion } from './investigador'
+
+type Pedir = (url: string, init?: RequestInit) => Promise<Response>
+
+export const SRI_REST = 'https://srienlinea.sri.gob.ec/sri-matriculacion-vehicular-recaudacion-servicio-internet/rest'
+export const SRI_PAGINA = 'https://srienlinea.sri.gob.ec/sri-en-linea/SriVehiculosWeb/ConsultaValoresPagarVehiculo/Consultas/consultaRubros'
+
+/** Datos base del vehículo tal como los devuelve el SRI (nombres de campo reales del servicio). */
+export interface BaseSri {
+  codigoVehiculo?: number
+  descripcionMarca?: string
+  descripcionModelo?: string
+  anioAuto?: number | string
+  descripcionPais?: string
+  colorVehiculo1?: string
+  colorVehiculo2?: string
+  cilindraje?: number | string
+  nombreClase?: string
+  descripcionServicio?: string
+  ultimoAnioPagado?: number | string
+  fechaUltimaMatricula?: string
+  fechaCaducidadMatricula?: string
+  prohibidoEnajenar?: string
+  observacion?: string
+}
+export interface RubroSri { descripcionRubro?: string; valorRubro?: number; anioDesdePago?: number; anioHastaPago?: number; nombreCortoBeneficiario?: string }
+
+/** «pba-1234», «PBA 1234» → «PBA1234». */
+export function normalizarPlaca(p: string): string {
+  return (p || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+/** Autos: 3 letras + 3 o 4 números; motos: 2 letras + 3 números + 1 letra. */
+export function placaValida(p: string): boolean {
+  return /^[A-Z]{3}\d{3,4}$/.test(p) || /^[A-Z]{2}\d{3}[A-Z]$/.test(p)
+}
+
+export const urlBaseSri = (placa: string) => `${SRI_REST}/BaseVehiculo/obtenerPorNumeroPlacaOPorNumeroCampvOPorNumeroCpn?numeroPlacaCampvCpn=${placa}`
+const urlRubrosSri = (codigo: number) => `${SRI_REST}/ConsultaRubros/obtenerPorCodigoVehiculo?codigoVehiculo=${codigo}`
+
+async function conTiempo(pedir: Pedir, url: string, ms: number) {
+  const c = new AbortController()
+  const t = setTimeout(() => c.abort(), ms)
+  try { return await pedir(url, { signal: c.signal, headers: { Accept: 'application/json' } }) } finally { clearTimeout(t) }
+}
+
+export class ErrorPlaca extends Error {
+  constructor(public tipo: 'sin-acceso' | 'no-existe' | 'otro', mensaje: string) { super(mensaje) }
+}
+
+/** Consulta directa al SRI desde el navegador. Lanza ErrorPlaca('sin-acceso') si el navegador no puede llegar. */
+export async function consultarSri(placa: string, pedir: Pedir = fetch, ms = 15000): Promise<{ base: BaseSri; rubros: RubroSri[] }> {
+  let r: Response
+  try { r = await conTiempo(pedir, urlBaseSri(placa), ms) } catch {
+    throw new ErrorPlaca('sin-acceso', 'El navegador no pudo consultar el SRI directamente (servicio caído o no permite consultas desde otras páginas).')
+  }
+  if (!r.ok) throw new ErrorPlaca(r.status === 404 ? 'no-existe' : 'otro', r.status === 404 ? `El SRI no tiene registrada la placa ${placa}.` : `El SRI respondió ${r.status}.`)
+  const base = (await r.json().catch(() => null)) as BaseSri | null
+  if (!base || !base.codigoVehiculo) throw new ErrorPlaca('no-existe', `El SRI no tiene registrada la placa ${placa}.`)
+  let rubros: RubroSri[] = []
+  try {
+    const rr = await conTiempo(pedir, urlRubrosSri(base.codigoVehiculo), ms)
+    if (rr.ok) rubros = ((await rr.json()) as RubroSri[]) ?? []
+  } catch { /* sin rubros: se informa solo lo base */ }
+  return { base, rubros }
+}
+
+const titulo = (s?: string) => (s ?? '').toLowerCase().replace(/(^|\s|-)(\p{L})/gu, (_, a, b) => a + b.toUpperCase()).trim()
+const CLASES: Record<string, string> = { JEEP: 'SUV', CAMIONETA: 'Camioneta', 'VEHICULO UTILITARIO': 'SUV', FURGONETA: 'Furgoneta', AUTOMOVIL: '', AUTOMÓVIL: '' }
+
+/** Convierte la respuesta del SRI en hallazgos aplicables (fuente: SRI) y avisos para el vendedor. */
+export function interpretarSri(placa: string, base: BaseSri, rubros: RubroSri[]): Investigacion {
+  const fuente = { nombre: `SRI · placa ${placa}`, url: urlBaseSri(placa) }
+  const h: Hallazgo[] = []
+  const add = (campo: Hallazgo['campo'], etiqueta: string, valor: string | undefined, opcion?: string) => {
+    if (valor) h.push({ campo, etiqueta, valor, opciones: opcion ? [opcion] : undefined, fuente })
+  }
+  const marcaSri = (base.descripcionMarca ?? '').trim()
+  const marca = ALIAS_MARCA[marcaSri.toLowerCase()] ?? titulo(marcaSri)
+  // El modelo del SRI suele traer versión y datos: «AVEO FAMILY AC 1.5 4P 4X2 TM» → se analiza igual que un texto libre
+  const a = analizar(`${marca} ${base.descripcionModelo ?? ''}`).vehiculo
+  const modelo = a.modelo || titulo((base.descripcionModelo ?? '').split(/\s+/)[0])
+  add('marca', 'Marca', marca, marca)
+  add('modelo', 'Modelo (SRI)', titulo(base.descripcionModelo), modelo)
+  if (a.version) add('version', 'Versión', a.version, a.version)
+  const anio = String(base.anioAuto ?? '').match(/\d{4}/)?.[0]
+  add('anio', 'Año', anio, anio)
+  const cc = +String(base.cilindraje ?? '').replace(/\D/g, '')
+  if (cc > 400) add('motor', 'Cilindraje', `${cc} cc`, (Math.round(cc / 100) / 10).toFixed(1))
+  if (a.transmision) add('transmision', 'Transmisión', a.transmision, a.transmision)
+  if (a.puertas) add('puertas', 'Puertas', a.puertas, a.puertas)
+  if (a.traccion) add('traccion', 'Tracción', a.traccion, a.traccion)
+  for (const e of a.equipamiento) add('equipamiento', 'Equipamiento (según el modelo registrado)', e, e)
+  const color = titulo(base.colorVehiculo1)
+  add('color', 'Color', color + (base.colorVehiculo2 && base.colorVehiculo2 !== base.colorVehiculo1 ? ` / ${titulo(base.colorVehiculo2)}` : ''), color)
+  add('procedencia', 'País de origen', titulo(base.descripcionPais), titulo(base.descripcionPais))
+  const clase = (base.nombreClase ?? '').toUpperCase().trim()
+  add('carroceria', 'Clase', titulo(clase), CLASES[clase] || undefined)
+  add(null, 'Servicio', titulo(base.descripcionServicio))
+
+  const avisos: string[] = []
+  const deuda = rubros.reduce((s, r) => s + (+(r.valorRubro ?? 0) || 0), 0)
+  const pagado = String(base.ultimoAnioPagado ?? '').match(/\d{4}/)?.[0]
+  if (deuda > 0) {
+    avisos.push(`El vehículo tiene valores pendientes en el SRI por $${deuda.toFixed(2)} (${rubros.filter((r) => r.valorRubro).map((r) => titulo(r.descripcionRubro)).join(', ')}). No se publicará «matrícula al día».`)
+  } else if (pagado) {
+    add('matricula', 'Matrícula', `Último año pagado: ${pagado}, sin valores pendientes en el SRI`, `Al día ${pagado}`)
+  }
+  if (base.fechaCaducidadMatricula) add(null, 'Matrícula vigente hasta', base.fechaCaducidadMatricula.slice(0, 10))
+  if (/^(s|si|sí)$/i.test((base.prohibidoEnajenar ?? '').trim()))
+    avisos.push('⚠️ El SRI registra prohibición de enajenar: revisa la situación legal antes de publicar.')
+  return { resumen: '', hallazgos: h, avisos, fuentes: [fuente] }
+}
+
+/**
+ * Interpreta lo que el vendedor pega desde el SRI: el JSON del servicio (al abrir el enlace de datos) o el texto de la
+ * página de consulta («Marca: CHEVROLET», «Modelo: …», «Año: 2015», «Cilindraje: 1498»…).
+ */
+export function interpretarPegado(placa: string, texto: string): Investigacion | null {
+  const t = (texto || '').trim()
+  if (!t) return null
+  if (t.startsWith('{') || t.startsWith('[')) {
+    try {
+      const j = JSON.parse(t)
+      const base = Array.isArray(j) ? j[0] : j
+      if (base && (base.descripcionMarca || base.descripcionModelo)) return interpretarSri(placa, base, [])
+    } catch { /* no era JSON válido: se intenta como texto */ }
+  }
+  const campo = (...nombres: string[]) => {
+    for (const n of nombres) {
+      const m = t.match(new RegExp(`${n}\\s*[:\\n\\t]\\s*([^\\n\\t]+)`, 'i'))
+      if (m && m[1].trim()) return m[1].trim()
+    }
+    return undefined
+  }
+  const base: BaseSri = {
+    descripcionMarca: campo('marca'),
+    descripcionModelo: campo('modelo'),
+    anioAuto: campo('año de fabricaci[oó]n', 'año modelo', 'a[ñn]o'),
+    cilindraje: campo('cilindraje'),
+    colorVehiculo1: campo('color 1', 'color'),
+    descripcionPais: campo('pa[ií]s(?: de origen)?'),
+    nombreClase: campo('clase'),
+    descripcionServicio: campo('servicio'),
+    ultimoAnioPagado: campo('[úu]ltimo a[ñn]o pagado'),
+  }
+  if (!base.descripcionMarca && !base.descripcionModelo) return null
+  return interpretarSri(placa, base, [])
+}
