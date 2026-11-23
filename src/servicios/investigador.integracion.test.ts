@@ -37,4 +37,17 @@ describe.runIf(activa)('investigación real en Wikipedia', () => {
     expect(r.fuentes[0]?.url).toContain('Mazda_323')
     expect(r.avisos[0]).toMatch(/internacionalmente como Mazda 323/)
   }, 30000)
+  it('Suzuki Forsa 1989 (así lo registra el SRI): artículo del Suzuki Cultus de esa época, no el Cultus Crescent 1995-2007', async () => {
+    const { vehiculo } = analizar('Suzuki Forsa 1989')
+    const r = await investigarWikipedia(vehiculo)
+    expect(r.fuentes.map((f) => f.nombre).join(' ')).not.toMatch(/Crescent|Baleno/)
+    expect(r.fuentes.some((f) => /Suzuki Cultus/.test(f.nombre))).toBe(true)
+    expect(r.avisos.join(' ')).not.toMatch(/Revisa el año/)
+    expect(r.hallazgos.find((h) => h.etiqueta === 'Período de producción')?.valor).toMatch(/1983/)
+  }, 30000)
+  it('Chevrolet Chevytaxi 2010 (SRI): datos del Chevrolet Aveo', async () => {
+    const { vehiculo } = analizar('Chevrolet Chevytaxi 2010')
+    const r = await investigarWikipedia(vehiculo)
+    expect(r.fuentes[0]?.url).toContain('Chevrolet_Aveo')
+  }, 30000)
 })

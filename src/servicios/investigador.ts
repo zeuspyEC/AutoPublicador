@@ -40,24 +40,45 @@ async function json(pedir: Pedir, url: string) {
   return r.json()
 }
 
-/** Busca el artículo del modelo y devuelve su título (solo si menciona el modelo) y el wikitexto de la cabecera. */
-async function articulo(pedir: Pedir, idioma: 'es' | 'en', consulta: string, modelo: string) {
+/** Período de producción de la ficha del artículo (español o inglés). */
+function periodoDe(wikitexto: string): string {
+  const f = camposFicha(wikitexto, ['Ficha de automóvil', 'Ficha de vehículo', 'Infobox automobile', 'Infobox car'])
+  return f['período'] ?? f['periodo'] ?? f['producción'] ?? f['production'] ?? ''
+}
+
+/**
+ * Busca el artículo del modelo (solo títulos que mencionan el modelo). Prefiere el título exacto («Suzuki Cultus») y
+ * descarta artículos cuyo período de producción no incluye el año del vehículo (un Forsa 1989 no es el «Cultus
+ * Crescent» de 1995-2007), probando el siguiente candidato.
+ */
+async function articulo(pedir: Pedir, idioma: 'es' | 'en', consulta: string, modelo: string, exacto = '', anio = '') {
   const api = `https://${idioma}.wikipedia.org/w/api.php?format=json&origin=*`
   const buscar = async (q: string) => {
     const s = await json(pedir, `${api}&action=query&list=search&srlimit=5&srinfo=suggestion&srsearch=${encodeURIComponent(q)}`)
     const titulos: string[] = (s?.query?.search ?? []).map((x: { title: string }) => x.title)
-    return { titulo: titulos.find((t) => sinTildes(t).includes(sinTildes(modelo))), sugerencia: s?.query?.searchinfo?.suggestion as string | undefined }
+    const candidatos = titulos.filter((t) => sinTildes(t).includes(sinTildes(modelo)))
+      .sort((a, b) => Number(sinTildes(b) === sinTildes(exacto)) - Number(sinTildes(a) === sinTildes(exacto)))
+    return { candidatos, sugerencia: s?.query?.searchinfo?.suggestion as string | undefined }
   }
-  let { titulo, sugerencia } = await buscar(consulta)
+  let { candidatos, sugerencia } = await buscar(consulta)
   // Si no hay resultado, se usa la corrección que propone Wikipedia («mazda alegro» → «mazda allegro»)
-  if (!titulo && sugerencia) titulo = (await buscar(sugerencia)).titulo
-  if (!titulo) return null
-  const r = await json(pedir, `${api}&action=query&prop=revisions&rvprop=content&rvslots=main&rvsection=0&redirects=1&titles=${encodeURIComponent(titulo)}`)
-  const pagina = Object.values(r?.query?.pages ?? {})[0] as { title?: string; revisions?: { slots: { main: { '*': string } } }[] }
-  const wikitexto = pagina?.revisions?.[0]?.slots?.main?.['*']
-  if (!wikitexto) return null
-  const tituloFinal = pagina.title ?? titulo
-  return { titulo: tituloFinal, wikitexto, url: `https://${idioma}.wikipedia.org/wiki/${encodeURIComponent(tituloFinal.replace(/ /g, '_'))}` }
+  if (!candidatos.length && sugerencia) candidatos = (await buscar(sugerencia)).candidatos
+  let primero: { titulo: string; wikitexto: string; url: string; encaja: boolean; confirma: boolean } | null = null
+  for (const titulo of candidatos.slice(0, 3)) {
+    const r = await json(pedir, `${api}&action=query&prop=revisions&rvprop=content&rvslots=main&rvsection=0&redirects=1&titles=${encodeURIComponent(titulo)}`)
+    const pagina = Object.values(r?.query?.pages ?? {})[0] as { title?: string; revisions?: { slots: { main: { '*': string } } }[] }
+    const wikitexto = pagina?.revisions?.[0]?.slots?.main?.['*']
+    if (!wikitexto) continue
+    const rangos = rangosAnios(periodoDe(wikitexto))
+    const encaja = !anio || !rangos.length || rangos.some(([a, b]) => +anio >= a && +anio <= b)
+    const tituloFinal = pagina.title ?? titulo
+    const art = { titulo: tituloFinal, wikitexto, url: `https://${idioma}.wikipedia.org/wiki/${encodeURIComponent(tituloFinal.replace(/ /g, '_'))}`, encaja, confirma: encaja && rangos.length > 0 }
+    // Solo se adelanta un artículo que CONFIRMA el año con su período; si no, se prueba el siguiente
+    if (art.confirma || !anio) return art
+    primero ??= art
+  }
+  // Ninguno confirma el año: el mejor candidato (exacto o primero); si su período no incluye el año, se avisa «Revisa el año»
+  return primero
 }
 
 async function resumenWikipedia(pedir: Pedir, titulo: string): Promise<string> {
@@ -78,10 +99,13 @@ export async function investigarWikipedia(v: Vehiculo, pedir: Pedir = fetch): Pr
   const modeloBuscado = equivalente ? equivalente.split(' ').slice(1).join(' ') : v.modelo
   if (equivalente) res.avisos.push(`El ${nombre} se conoce internacionalmente como ${equivalente}; se muestran los datos de ese modelo.`)
 
-  const [es, en] = await Promise.all([
-    articulo(pedir, 'es', `${buscado} automóvil`, modeloBuscado).catch(() => null),
-    articulo(pedir, 'en', `${buscado} car`, modeloBuscado).catch(() => null),
+  let [es, en] = await Promise.all([
+    articulo(pedir, 'es', `${buscado} automóvil`, modeloBuscado, buscado, v.anio).catch(() => null),
+    articulo(pedir, 'en', `${buscado} car`, modeloBuscado, buscado, v.anio).catch(() => null),
   ])
+  // Si un idioma confirma (con su período de producción) el artículo de la época correcta y el otro no encaja, se descarta el que no corresponde
+  if (es && !es.encaja && en?.confirma) es = null
+  if (en && !en.encaja && es?.confirma) en = null
 
   if (es) {
     const fuente = { nombre: `Wikipedia: ${es.titulo}`, url: es.url }
@@ -116,6 +140,15 @@ export async function investigarWikipedia(v: Vehiculo, pedir: Pedir = fetch): Pr
     const fuente = { nombre: `Wikipedia (inglés): ${en.titulo}`, url: en.url }
     res.fuentes.push(fuente)
     const f = camposFicha(en.wikitexto, ['Infobox automobile', 'Infobox car'])
+    if (!es) {
+      // Sin artículo en español de esa época: los datos generales salen de la ficha en inglés
+      const info = (etiqueta: string, valor?: string) => { if (valor) res.hallazgos.push({ campo: null, etiqueta, valor, fuente }) }
+      info('Fabricante', f['manufacturer'])
+      info('Período de producción', f['production'])
+      info('Segmento', f['class'])
+      if (v.anio && rangosAnios(f['production'] ?? '').length && !rangosAnios(f['production'] ?? '').some(([a, b]) => +v.anio >= a && +v.anio <= b))
+        res.avisos.push(`Revisa el año: ${v.anio} queda fuera del período de producción indicado (${f['production']}).`)
+    }
     const motores = cilindradas(f['engine'] ?? '')
     if (motores.length && !res.hallazgos.some((h) => h.campo === 'motor'))
       res.hallazgos.push({ campo: 'motor', etiqueta: 'Motores', valor: motores.map((m) => `${m} L`).join(', '), opciones: motores, fuente })

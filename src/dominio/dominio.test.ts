@@ -216,3 +216,11 @@ describe('fusión: la placa (SRI) manda sobre el texto', () => {
     expect(f.diferencias).toEqual([])
   })
 })
+
+describe('equivalencias de Wikipedia con la marca que registra el SRI', () => {
+  it('el SRI registra el Forsa como Suzuki: se busca el Suzuki Cultus', async () => {
+    const { ARTICULO_EQUIVALENTE } = await import('./catalogo')
+    expect(ARTICULO_EQUIVALENTE['suzuki forsa']).toBe('Suzuki Cultus')
+    expect(ARTICULO_EQUIVALENTE['chevrolet chevytaxi']).toBe('Chevrolet Aveo')
+  })
+})

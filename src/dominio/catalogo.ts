@@ -124,6 +124,8 @@ export const ARTICULO_EQUIVALENTE: Record<string, string> = {
   'chevrolet luv': 'Isuzu Faster',
   'chevrolet esteem': 'Suzuki Baleno',
   'chevrolet forsa': 'Suzuki Cultus',
+  'suzuki forsa': 'Suzuki Cultus', // el SRI registra los Forsa antiguos como SUZUKI
+  'suzuki esteem': 'Suzuki Baleno',
   'chevrolet swift': 'Suzuki Swift',
   'chevrolet optra': 'Daewoo Lacetti',
   'chevrolet corsa evolution': 'Chevrolet Corsa',
