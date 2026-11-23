@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { analizar } from './analizador'
-import { descripciones, titulos } from './plantillas'
+import { comentarios, descripciones, titulos } from './plantillas'
 import { formatearTelefono, normalizarTelefono, telefonoValido, tieneNumeroLimpio } from './telefono'
 import { BENEFICIOS_PREDETERMINADOS, type Perfil } from './tipos'
 
@@ -146,5 +146,39 @@ describe('corrección de errores de tipeo y valores de carrocería', () => {
     expect(valorParaCampo('carroceria', 'Hatchback tres y cinco puertas')).toBe('Hatchback')
     expect(valorParaCampo('carroceria', 'Sedán 4 puertas')).toBe('Sedán')
     expect(valorParaCampo('carroceria', 'Familiar de cinco puertas')).toBe('Familiar')
+  })
+})
+
+describe('más variaciones: descripciones, títulos condicionales y comentarios', () => {
+  const perfilT: Perfil = { nombre: 'Erick Costa', telefono: '0987654321', estiloTelefono: 'puntos', horario: 'Todos los días de 08:30 a 17:30' }
+  const base = analizar('Toyota Hilux 2.5 2014 diésel 4x4 cabina doble 145.000 km, único dueño, matrícula 2025, $28500 negociable, recibo carro o moto').vehiculo
+  const ctx = { v: { ...base, carroceria: 'Camioneta' }, perfil: perfilT, beneficios: BENEFICIOS_PREDETERMINADOS }
+
+  it('12 descripciones distintas, todas con contacto, sin número limpio ni huecos', () => {
+    const d = descripciones(ctx)
+    expect(d.length).toBe(12)
+    expect(new Set(d.map((x) => x.texto)).size).toBe(12)
+    for (const x of d) {
+      expect(x.texto, x.id).toContain('0987.654.321')
+      expect(tieneNumeroLimpio(x.texto), x.id).toBe(false)
+      expect(x.texto, x.id).not.toMatch(/undefined|null|NaN|\n{3,}| {2,}/)
+    }
+    expect(d.find((x) => x.id === 'ficha-emoji')!.texto).toContain('🛣️ Kilometraje: 145.000 km')
+  })
+  it('títulos condicionales solo cuando hay datos que los sostienen', () => {
+    const ids = titulos(ctx).map((t) => t.id)
+    expect(ids).toEqual(expect.arrayContaining(['kilometraje', 'unico-dueno', 'cambio-moto', 'familia', 'remate']))
+    const sinDatos = titulos({ ...ctx, v: analizar('Kia Rio 2016').vehiculo }).map((t) => t.id)
+    expect(sinDatos).not.toEqual(expect.arrayContaining(['kilometraje']))
+    expect(sinDatos).not.toContain('unico-dueno')
+    expect(sinDatos).not.toContain('remate')
+    for (const t of titulos(ctx)) expect(t.texto, t.id).not.toMatch(/\s{2,}|undefined/)
+  })
+  it('comentarios y respuestas rápidas', () => {
+    const c = comentarios(ctx)
+    expect(c.length).toBeGreaterThanOrEqual(6)
+    expect(c.find((x) => x.id === 'precio')!.texto).toContain('$28.500')
+    expect(c.find((x) => x.id === 'horario')!.texto).toContain('Atendemos todos los días de 08:30 a 17:30')
+    for (const x of c) expect(tieneNumeroLimpio(x.texto), x.id).toBe(false)
   })
 })
