@@ -41,6 +41,8 @@ Fuera de alcance por ahora: fotos (no hay almacenamiento), respuestas a clientes
 | RF13 | **Pegar lo copiado de Google** (sin API): se extraen motor, transmisión, tracción, potencia, torque, consumo, velocidades y pasajeros. | ✅ |
 | RF14 | **Corrección de errores de tipeo** del modelo («Alegro» → «Allegro») y nombres comerciales de Ecuador → artículo internacional (Allegro → Mazda 323). | ✅ |
 | RF15 | **Diagnóstico de la clave de Google** en Ajustes (modelos permitidos, prueba con y sin búsqueda, motivo exacto de cada error). | ✅ |
+| RF17 | **Historial de placas consultadas** (placa, resumen, datos y avisos del SRI) para crear otra publicación sin volver a consultar. | ✅ |
+| RF18 | **Motos**: marcas frecuentes, cilindraje en cc, clase «Moto» y redacción adecuada. | ✅ |
 | RF16 | **Comentarios y respuestas rápidas** para la publicación (disponible, cita, precio, cambio, papeles, horario, subir). | ✅ |
 
 ### No funcionales
@@ -151,7 +153,7 @@ plantillas, convierte `{{ubl|…}}`, `{{convert|…}}`/`{{convertir|…}}` y `&n
 
 ## 8. Pruebas
 
-- `npm test` — 51 pruebas unitarias (analizador con los casos de las publicaciones reales, teléfono, plantillas,
+- `npm test` — 58 pruebas unitarias (analizador con los casos de las publicaciones reales, teléfono, plantillas,
   fichas de Wikipedia con texto real, formato de respuesta de Gemini).
 - `npm run test:integracion` — 3 pruebas contra Wikipedia real (Peugeot 206, año fuera de producción, Chevrolet
   Vitara → Suzuki Vitara).
@@ -195,5 +197,6 @@ de terceros, `.env` ni claves; mantener este archivo al día (sección 11).
 | 2026-11-23 | Investigación con fuente: Wikipedia ES/EN (lectura robusta de fichas) y Google vía Gemini. Se corrigieron: kilometraje que absorbía el «4» de «4x4», año confundido con el modelo «Peugeot 2008», palabras comunes tomadas como modelos, `&nbsp;` en motores, error 429 de Wikipedia sin `Api-User-Agent`. |
 | 2026-11-23 | Interfaz móvil en 4 pasos, ajustes (perfil, ubicación, beneficios, clave de Google), historial. Prueba E2E en Chrome. Mejoras de redacción (versión «XT», «pantalla Android», horario, motor sin repetir). |
 | 2026-11-23 | Despliegue automático en GitHub Pages con pruebas previas. Verificado en el sitio publicado (Chrome a 390 px). |
+| 2026-11-23 | v0.3.0 — Historial de placas; «Pegar del portapapeles»; diagnóstico del fallo del SRI (con una petición «no-cors» se distingue política del navegador vs. red); motos. Diagnóstico de red: el SRI está en línea (responde 200 desde Canadá, Alemania e Indonesia) pero filtra redes y regiones: no responde a la red del PC de desarrollo (Telealfacom, Ecuador) ni a GitHub Actions (EE. UU.). La lectura automática desde el navegador solo se puede confirmar en el celular del usuario; la consulta manual funciona siempre. 58 pruebas + 4 de integración; E2E con la placa real MCY0327 (diagnóstico correcto). |
 | 2026-11-23 | v0.2.0 — Placa (SRI) con respaldo «pegar»; Google: descubre modelos, explica el 429 real del usuario (cuota agotada con búsqueda) y usa respaldo sin búsqueda marcado; diagnóstico de la clave; Wikipedia con nombres de Ecuador (Allegro → Mazda 323) y corrección de tipeo; abreviaturas TM/TA/AC; 12 descripciones, títulos condicionales y comentarios. 51 pruebas + 4 contra Wikipedia real; prueba E2E con SRI y Gemini simulados en su formato real. El SRI no responde desde la red de desarrollo: probar la consulta automática desde el celular. |
 | 2026-11-23 | v0.1.1 — Prueba en el sitio publicado con otro vehículo: precio escrito sin símbolo («… cero multas 4990») no se detectaba; títulos largos quedaban cortados en su cuadro. Ambos corregidos (29 pruebas). |
