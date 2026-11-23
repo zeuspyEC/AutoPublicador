@@ -79,11 +79,19 @@ function PegarSri({ placa, pegar }: { placa: string; pegar: Props['pegarSri'] })
       <ol className="ayuda pasos">
         <li>Abre <a href={urlBaseSri(placa)} target="_blank" rel="noreferrer">los datos del SRI de la placa {placa}</a>, selecciona todo y cópialo.
           {' '}(También puedes usar la <a href={SRI_PAGINA} target="_blank" rel="noreferrer">consulta del SRI</a> y copiar la información del vehículo.)</li>
-        <li>Pégalo aquí:</li>
+        <li>Vuelve aquí y pulsa «Pegar del portapapeles» (o pégalo en el cuadro).</li>
       </ol>
       <textarea rows={4} value={texto} onChange={(e) => { setTexto(e.target.value); setFallo(false) }} placeholder='{"descripcionMarca":"CHEVROLET", …}  o  Marca: CHEVROLET …' />
       <div className="fila">
-        <button type="button" className="boton secundario" disabled={!texto.trim()} onClick={() => setFallo(!pegar(texto))}>Usar estos datos</button>
+        <button type="button" className="boton principal" onClick={async () => {
+          // Un toque: lee lo copiado y lo usa (el navegador puede pedir permiso para leer el portapapeles)
+          try {
+            const t = await navigator.clipboard.readText()
+            setTexto(t)
+            setFallo(!pegar(t))
+          } catch { setFallo(true) }
+        }}>📋 Pegar del portapapeles</button>
+        <button type="button" className="boton secundario" disabled={!texto.trim()} onClick={() => setFallo(!pegar(texto))}>Usar lo escrito</button>
       </div>
       {fallo && <p className="aviso">No se reconocieron datos del SRI en lo pegado. Copia la información del vehículo (marca, modelo, año…).</p>}
     </div>

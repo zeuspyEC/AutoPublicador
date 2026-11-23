@@ -39,7 +39,7 @@ export function FormVehiculo({ v, origenes, faltantes, cambiar }: Props) {
         {texto('modelo', 'Modelo')}
         {texto('version', 'Versión', { placeholder: 'XT, GLS, LTZ…' })}
         {texto('anio', 'Año', { inputMode: 'numeric', placeholder: '2015' })}
-        {texto('motor', 'Motor (litros)', { placeholder: '1.6', inputMode: 'decimal' })}
+        {texto('motor', 'Motor', { placeholder: '1.6 o 150 cc' })}
         <label className={`campo ${faltantes.includes('transmision') && !v.transmision ? 'faltante' : ''}`}>
           <span>Transmisión {marca('transmision')}</span>
           <select value={v.transmision} onChange={(e) => cambiar('transmision', e.target.value as Vehiculo['transmision'])}>

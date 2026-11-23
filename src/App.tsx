@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { analizar } from './dominio/analizador'
 import { comentarios as generarComentarios, descripciones as generarDescripciones, titulos as generarTitulos } from './dominio/plantillas'
 import { VEHICULO_VACIO, type Ajustes as TAjustes, type Origen, type Origenes, type Perfil, type Vehiculo } from './dominio/tipos'
-import { almacen, type Publicacion } from './servicios/almacen'
+import { almacen, type PlacaConsultada, type Publicacion } from './servicios/almacen'
 import { investigarGoogle, investigarTextoPegado, investigarWikipedia, type Hallazgo, type Investigacion } from './servicios/investigador'
-import { consultarSri, ErrorPlaca, interpretarPegado, interpretarSri, normalizarPlaca, placaValida } from './servicios/placa'
+import { consultarSri, ErrorPlaca, interpretarPegado, interpretarSri, normalizarPlaca, placaValida, resumenDePlaca } from './servicios/placa'
 import { Ajustes } from './componentes/Ajustes'
 import { FormPerfil } from './componentes/FormPerfil'
 import { FormVehiculo } from './componentes/FormVehiculo'
@@ -55,6 +55,7 @@ export default function App() {
   const [pegado, setPegado] = useState<EstadoInvestigacion>({ estado: 'inactivo' })
   const [correcciones, setCorrecciones] = useState<string[]>([])
   const [historial, setHistorial] = useState<Publicacion[]>(() => almacen.historial())
+  const [placas, setPlacas] = useState<PlacaConsultada[]>(() => almacen.placas())
   const [idPublicacion, setIdPublicacion] = useState<string>(() => crypto.randomUUID())
   const ronda = useRef(0) // descarta respuestas de investigaciones anteriores
   const vActual = useRef(v)
@@ -113,6 +114,7 @@ export default function App() {
       const r = interpretarSri(p, base, rubros)
       setSri({ estado: 'listo', resultado: r })
       completarCon(r, 'sri')
+      registrarPlaca(p, r)
     } catch (e) {
       if (n === ronda.current) setSri({ estado: 'error', error: (e as Error).message, sinAcceso: e instanceof ErrorPlaca && e.tipo === 'sin-acceso' })
     }
@@ -134,11 +136,31 @@ export default function App() {
     await Promise.all([enPlaca, buscarWikipedia(base, n), buscarGoogle(base, n)])
   }
 
+  /** Guarda la placa en el historial de placas consultadas (la más reciente primero). */
+  function registrarPlaca(p: string, r: Investigacion) {
+    almacen.guardarPlaca({ placa: p, fecha: new Date().toISOString(), resumen: resumenDePlaca(r), resultado: r })
+    setPlacas(almacen.placas())
+  }
+
+  /** Nueva publicación con una placa del historial: usa los datos guardados, sin volver a consultar el SRI. */
+  function usarPlaca(p: PlacaConsultada) {
+    const n = ++ronda.current
+    vActual.current = VEHICULO_VACIO
+    setTexto(''); setPlaca(p.placa); setPlacaConsultada(p.placa); setCorrecciones([]); setOrigenes({}); setV(VEHICULO_VACIO)
+    setGoogle({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' }); setWiki({ estado: 'inactivo' })
+    setSri({ estado: 'listo', resultado: p.resultado })
+    completarCon(p.resultado, 'sri')
+    setGenerado(true); setIdPublicacion(crypto.randomUUID()); setVista('crear')
+    buscarWikipedia(vActual.current, n)
+    buscarGoogle(vActual.current, n)
+  }
+
   function pegarSri(t: string): boolean {
     const r = interpretarPegado(placaConsultada, t)
     if (!r) return false
     setSri({ estado: 'listo', resultado: r })
     completarCon(r, 'sri')
+    registrarPlaca(placaConsultada, r)
     if (wiki.estado === 'inactivo' && vActual.current.modelo) buscarWikipedia(vActual.current, ronda.current)
     return true
   }
@@ -202,7 +224,7 @@ export default function App() {
         <nav>
           {(['crear', 'historial', 'ajustes'] as Vista[]).map((x) => (
             <button key={x} type="button" className={vista === x ? 'activa' : ''} onClick={() => setVista(x)}>
-              {x === 'crear' ? 'Crear' : x === 'historial' ? `Historial${historial.length ? ` (${historial.length})` : ''}` : 'Ajustes'}
+              {x === 'crear' ? 'Crear' : x === 'historial' ? `Historial${historial.length + placas.length ? ` (${historial.length + placas.length})` : ''}` : 'Ajustes'}
             </button>
           ))}
         </nav>
@@ -217,7 +239,9 @@ export default function App() {
         )}
 
         {vista === 'historial' && (
-          <Historial lista={historial} abrir={abrir} borrar={(id) => { almacen.borrarDeHistorial(id); setHistorial(almacen.historial()) }} />
+          <Historial lista={historial} placas={placas} abrir={abrir} usarPlaca={usarPlaca}
+            borrar={(id) => { almacen.borrarDeHistorial(id); setHistorial(almacen.historial()) }}
+            borrarPlaca={(pl) => { almacen.borrarPlaca(pl); setPlacas(almacen.placas()) }} />
         )}
 
         {vista === 'crear' && (

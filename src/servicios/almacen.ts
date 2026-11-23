@@ -1,5 +1,6 @@
 // Datos guardados en este navegador (localStorage): perfil del vendedor, ajustes, borrador e historial.
 // No hay servidor: nada sale del teléfono o computador del vendedor (salvo las consultas de investigación).
+import type { Investigacion } from './investigador'
 import { BENEFICIOS_PREDETERMINADOS, UBICACION_PREDETERMINADA, type Ajustes, type Origenes, type Perfil, type Vehiculo } from '../dominio/tipos'
 
 export interface Publicacion {
@@ -12,7 +13,15 @@ export interface Publicacion {
   descripcion: string
 }
 
-const CLAVES = { perfil: 'ap.perfil', ajustes: 'ap.ajustes', historial: 'ap.historial', borrador: 'ap.borrador' }
+/** Placa consultada en el SRI: se guarda para reutilizarla sin volver a consultar. */
+export interface PlacaConsultada {
+  placa: string
+  fecha: string
+  resumen: string // «Chevrolet Aveo Family 2015 · Plateado»
+  resultado: Investigacion
+}
+
+const CLAVES = { perfil: 'ap.perfil', ajustes: 'ap.ajustes', historial: 'ap.historial', borrador: 'ap.borrador', placas: 'ap.placas' }
 
 function leer<T>(clave: string): T | null {
   try { const s = localStorage.getItem(clave); return s ? (JSON.parse(s) as T) : null } catch { return null }
@@ -37,6 +46,10 @@ export const almacen = {
     escribir(CLAVES.historial, [p, ...h].slice(0, 200))
   },
   borrarDeHistorial: (id: string) => escribir(CLAVES.historial, almacen.historial().filter((x) => x.id !== id)),
+
+  placas: () => leer<PlacaConsultada[]>(CLAVES.placas) ?? [],
+  guardarPlaca: (p: PlacaConsultada) => escribir(CLAVES.placas, [p, ...almacen.placas().filter((x) => x.placa !== p.placa)].slice(0, 300)),
+  borrarPlaca: (placa: string) => escribir(CLAVES.placas, almacen.placas().filter((x) => x.placa !== placa)),
 
   borrador: () => leer<{ texto: string; vehiculo: Vehiculo; origenes: Origenes }>(CLAVES.borrador),
   guardarBorrador: (b: { texto: string; vehiculo: Vehiculo; origenes: Origenes }) => escribir(CLAVES.borrador, b),

@@ -210,3 +210,4 @@ textarea.entrada { font-size: 1.05rem; }
 .diagnostico { list-style: none; padding: 0; margin: .5rem 0; display: flex; flex-direction: column; gap: .3rem; font-size: .9rem; }
 .diagnostico li { padding: .35rem .6rem; border-radius: 8px; background: var(--superficie-2); }
 .tarjeta-interna { background: var(--superficie-2); border-radius: 12px; padding: .7rem .8rem; margin-top: .6rem; }
+.chapa { display: inline-block; background: #fde047; color: #111827; border: 2px solid #111827; border-radius: 6px; padding: 0 .4rem; font-family: ui-monospace, Consolas, monospace; letter-spacing: .05em; margin-right: .3rem; }
