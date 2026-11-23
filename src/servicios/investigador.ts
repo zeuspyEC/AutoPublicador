@@ -5,7 +5,10 @@
 //     datos de la versión y el año exactos, con los enlaces que Google usó.
 import { ARTICULO_EQUIVALENTE } from '../dominio/catalogo'
 import type { Vehiculo } from '../dominio/tipos'
+import { analizar } from '../dominio/analizador'
 import { camposFicha, cilindradas, rangosAnios, traccionDe } from './wikitexto'
+
+const analizarTexto = (t: string) => analizar(t).vehiculo
 
 export interface Fuente { nombre: string; url: string }
 
@@ -133,3 +136,34 @@ export async function investigarWikipedia(v: Vehiculo, pedir: Pedir = fetch): Pr
 
 // La consulta a Google (Gemini) vive en google.ts
 export { investigarGoogle, extraerJson } from './google'
+
+/**
+ * Datos extraídos de un texto que el vendedor copió de Google (ficha técnica, resumen, página del fabricante).
+ * Sin API: la app abre la búsqueda, el vendedor copia lo que ve y aquí se reconocen los datos.
+ */
+export function investigarTextoPegado(texto: string, v: Vehiculo): Investigacion {
+  const consulta = [v.marca, v.modelo, v.version, v.anio, 'ficha técnica'].filter(Boolean).join(' ')
+  const fuente: Fuente = { nombre: 'Texto copiado de Google', url: `https://www.google.com/search?q=${encodeURIComponent(consulta)}` }
+  const res: Investigacion = { resumen: '', hallazgos: [], avisos: [], fuentes: [fuente] }
+  const a = analizarTexto(texto)
+  const add = (campo: keyof Vehiculo | null, etiqueta: string, valor?: string, opciones?: string[]) => {
+    if (valor) res.hallazgos.push({ campo, etiqueta, valor, opciones, fuente })
+  }
+  // Solo campos técnicos: marca, modelo, año y precio los decide el vendedor (el texto pegado puede hablar de otras versiones)
+  if (a.motor) add('motor', 'Motor', `${a.motor} L`, [a.motor])
+  if (a.transmision) add('transmision', 'Transmisión', a.transmision, [a.transmision])
+  if (a.combustible) add('combustible', 'Combustible', a.combustible, [a.combustible])
+  const traccion = a.traccion || traccionDe(texto) // «tracción delantera» además de 4x4/4x2
+  if (traccion) add('traccion', 'Tracción', traccion, traccion.split(' o '))
+  if (a.carroceria) add('carroceria', 'Carrocería', a.carroceria, [a.carroceria])
+  if (a.puertas) add('puertas', 'Puertas', a.puertas, [a.puertas])
+  for (const e of a.equipamiento) add('equipamiento', 'Equipamiento mencionado', e, [e])
+  const plano = texto.toLowerCase()
+  add(null, 'Potencia', plano.match(/(\d{2,3}(?:[.,]\d)?)\s*(?:hp|cv|caballos)/)?.[0])
+  add(null, 'Torque', plano.match(/(\d{2,3})\s*(?:nm|n·m|newton)/)?.[0])
+  add(null, 'Consumo', plano.match(/(\d{1,3}(?:[.,]\d)?)\s*(?:km\/gal[oó]n|km\/gal|km por gal[oó]n|km\/l|l\/100\s*km)/)?.[0])
+  add(null, 'Velocidades', plano.match(/(\d)\s*(?:velocidades|marchas|cambios)/)?.[0])
+  add(null, 'Pasajeros', plano.match(/(\d)\s*(?:pasajeros|plazas|asientos)/)?.[0])
+  if (!res.hallazgos.length) res.avisos.push('No se reconocieron datos técnicos en el texto pegado. Copia la parte de la ficha técnica (motor, transmisión, potencia…).')
+  return res
+}

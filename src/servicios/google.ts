@@ -10,9 +10,17 @@ type Pedir = (url: string, init?: RequestInit) => Promise<Response>
 const API = 'https://generativelanguage.googleapis.com/v1beta'
 const RESPALDO = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.0-flash']
 
+export type TipoErrorGoogle = 'clave' | 'permiso' | 'cuota' | 'modelo' | 'busqueda' | 'ocupado' | 'red' | 'otro'
+
 export class ErrorGoogle extends Error {
-  constructor(public codigo: number, public tipo: 'clave' | 'permiso' | 'cuota' | 'modelo' | 'busqueda' | 'ocupado' | 'red' | 'otro', mensaje: string, public detalle = '') {
+  codigo: number
+  tipo: TipoErrorGoogle
+  detalle: string
+  constructor(codigo: number, tipo: TipoErrorGoogle, mensaje: string, detalle = '') {
     super(mensaje)
+    this.codigo = codigo
+    this.tipo = tipo
+    this.detalle = detalle
   }
 }
 

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Origen, Origenes, Vehiculo } from '../dominio/tipos'
 
-const ETIQUETA_ORIGEN: Record<Origen, string> = { texto: 'de tu texto', wikipedia: 'Wikipedia', google: 'Google', manual: 'editado' }
+const ETIQUETA_ORIGEN: Record<Origen, string> = { texto: 'de tu texto', sri: 'SRI', wikipedia: 'Wikipedia', google: 'Google', manual: 'editado' }
 
 interface Props {
   v: Vehiculo

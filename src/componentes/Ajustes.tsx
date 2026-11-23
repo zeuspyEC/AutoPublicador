@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { BENEFICIOS_PREDETERMINADOS, UBICACION_PREDETERMINADA, type Ajustes as TAjustes, type Perfil } from '../dominio/tipos'
+import { diagnosticar, olvidarModelos, type Diagnostico } from '../servicios/google'
 import { FormPerfil } from './FormPerfil'
 
 interface Props {
@@ -14,6 +15,8 @@ export function Ajustes({ perfil, ajustes, guardarPerfil, guardarAjustes, borrar
   const [nuevo, setNuevo] = useState('')
   const [clave, setClave] = useState(ajustes.claveGemini)
   const [perfilOk, setPerfilOk] = useState(false)
+  const [probando, setProbando] = useState(false)
+  const [diag, setDiag] = useState<Diagnostico | null>(null)
   const set = (a: Partial<TAjustes>) => guardarAjustes({ ...ajustes, ...a })
 
   return (
@@ -65,15 +68,43 @@ export function Ajustes({ perfil, ajustes, guardarPerfil, guardarAjustes, borrar
           (con los enlaces consultados), pega una clave gratuita de Google AI Studio:
         </p>
         <ol className="ayuda pasos">
-          <li>Entra a <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a> con tu cuenta de Google.</li>
-          <li>Pulsa «Create API key» y copia la clave.</li>
+          <li>Entra a <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noreferrer">aistudio.google.com/api-keys</a> con tu cuenta de Google.</li>
+          <li>Pulsa «Crear clave de API», elige o crea el proyecto y copia la clave.</li>
           <li>Pégala aquí. Se guarda solo en este dispositivo.</li>
         </ol>
-        <form className="fila" onSubmit={(e) => { e.preventDefault(); set({ claveGemini: clave.trim() }) }}>
+        <form className="fila" onSubmit={(e) => { e.preventDefault(); olvidarModelos(); setDiag(null); set({ claveGemini: clave.trim() }) }}>
           <input type="password" value={clave} onChange={(e) => setClave(e.target.value)} placeholder="AIza…" autoComplete="off" />
           <button className="boton secundario" type="submit">{ajustes.claveGemini && ajustes.claveGemini === clave.trim() ? '✓ Guardada' : 'Guardar clave'}</button>
         </form>
-        {ajustes.claveGemini && <button type="button" className="enlace" onClick={() => { setClave(''); set({ claveGemini: '' }) }}>Quitar la clave</button>}
+        {ajustes.claveGemini && (
+          <>
+            <div className="fila">
+              <button type="button" className="boton secundario" disabled={probando} onClick={async () => {
+                setProbando(true); setDiag(null)
+                olvidarModelos()
+                setDiag(await diagnosticar(ajustes.claveGemini))
+                setProbando(false)
+              }}>{probando ? 'Probando con Google…' : '🧪 Probar clave ahora'}</button>
+              <button type="button" className="enlace" onClick={() => { setClave(''); setDiag(null); set({ claveGemini: '' }) }}>Quitar la clave</button>
+            </div>
+            {diag && (
+              <div className="tarjeta-interna">
+                <p><strong>{diag.conclusion}</strong></p>
+                {diag.modelos.length > 0 && <p className="ayuda">Modelos que permite tu clave: {diag.modelos.slice(0, 6).join(', ')}{diag.modelos.length > 6 ? '…' : ''}</p>}
+                <ul className="diagnostico">
+                  {diag.pruebas.map((p, i) => (
+                    <li key={i}>{p.ok ? '✅' : '❌'} {p.modelo} {p.busqueda ? 'con búsqueda de Google' : 'sin búsqueda'}: {p.motivo}</li>
+                  ))}
+                </ul>
+                <p className="ayuda">
+                  Revisa en Google AI Studio: <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noreferrer">claves</a> ·{' '}
+                  <a href="https://aistudio.google.com/usage" target="_blank" rel="noreferrer">uso y límites</a> ·{' '}
+                  <a href="https://aistudio.google.com/billing" target="_blank" rel="noreferrer">facturación (para habilitar la búsqueda)</a>
+                </p>
+              </div>
+            )}
+          </>
+        )}
       </section>
 
       <section className="tarjeta peligro">

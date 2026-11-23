@@ -37,7 +37,7 @@ export interface Vehiculo {
 }
 
 /** De dónde salió cada dato: así se sabe qué se escribió, qué se investigó y qué se corrigió a mano. */
-export type Origen = 'texto' | 'wikipedia' | 'google' | 'manual'
+export type Origen = 'texto' | 'sri' | 'wikipedia' | 'google' | 'manual'
 export type Origenes = Partial<Record<keyof Vehiculo, Origen>>
 
 export interface Beneficio {

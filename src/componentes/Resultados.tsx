@@ -8,13 +8,14 @@ interface Props {
   v: Vehiculo
   titulos: Variante[]
   descripciones: Variante[]
+  comentarios: Variante[]
   alGuardar: (titulo: string, descripcion: string) => void
 }
 
 const miles = (d: string) => (+d).toLocaleString('es-EC').replace(/,/g, '.')
 
 /** Variantes listas para copiar: el vendedor elige un título y una descripción (y puede retocarlos). */
-export function Resultados({ v, titulos, descripciones, alGuardar }: Props) {
+export function Resultados({ v, titulos, descripciones, comentarios, alGuardar }: Props) {
   const [titulo, setTitulo] = useState(0)
   const [desc, setDesc] = useState(0)
   const [editados, setEditados] = useState<Record<string, string>>({})
@@ -71,6 +72,17 @@ export function Resultados({ v, titulos, descripciones, alGuardar }: Props) {
           </div>
         </div>
       )}
+
+      <h3>Comentarios y respuestas <small>(para responder o subir la publicación)</small></h3>
+      <ul className="comentarios">
+        {comentarios.map((c) => (
+          <li key={c.id}>
+            <small>{c.nombre}</small>
+            <p>{c.texto}</p>
+            <Copiar texto={c.texto} />
+          </li>
+        ))}
+      </ul>
 
       <div className="guardar">
         <button type="button" className="boton secundario" onClick={() => { alGuardar(textoTitulo(titulo), textoDesc(desc)); setGuardado(true) }}>

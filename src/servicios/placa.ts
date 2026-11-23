@@ -50,7 +50,11 @@ async function conTiempo(pedir: Pedir, url: string, ms: number) {
 }
 
 export class ErrorPlaca extends Error {
-  constructor(public tipo: 'sin-acceso' | 'no-existe' | 'otro', mensaje: string) { super(mensaje) }
+  tipo: 'sin-acceso' | 'no-existe' | 'otro'
+  constructor(tipo: 'sin-acceso' | 'no-existe' | 'otro', mensaje: string) {
+    super(mensaje)
+    this.tipo = tipo
+  }
 }
 
 /** Consulta directa al SRI desde el navegador. Lanza ErrorPlaca('sin-acceso') si el navegador no puede llegar. */

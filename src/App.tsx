@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { analizar } from './dominio/analizador'
-import { descripciones as generarDescripciones, titulos as generarTitulos } from './dominio/plantillas'
+import { comentarios as generarComentarios, descripciones as generarDescripciones, titulos as generarTitulos } from './dominio/plantillas'
 import { VEHICULO_VACIO, type Ajustes as TAjustes, type Origen, type Origenes, type Perfil, type Vehiculo } from './dominio/tipos'
 import { almacen, type Publicacion } from './servicios/almacen'
-import { investigarGoogle, investigarWikipedia, type Hallazgo, type Investigacion } from './servicios/investigador'
+import { investigarGoogle, investigarTextoPegado, investigarWikipedia, type Hallazgo, type Investigacion } from './servicios/investigador'
+import { consultarSri, ErrorPlaca, interpretarPegado, interpretarSri, normalizarPlaca, placaValida } from './servicios/placa'
 import { Ajustes } from './componentes/Ajustes'
 import { FormPerfil } from './componentes/FormPerfil'
 import { FormVehiculo } from './componentes/FormVehiculo'
@@ -48,6 +49,11 @@ export default function App() {
   const [generado, setGenerado] = useState(!!borrador?.vehiculo?.modelo)
   const [wiki, setWiki] = useState<EstadoInvestigacion>({ estado: 'inactivo' })
   const [google, setGoogle] = useState<EstadoInvestigacion>({ estado: 'inactivo' })
+  const [placa, setPlaca] = useState('')
+  const [placaConsultada, setPlacaConsultada] = useState('')
+  const [sri, setSri] = useState<EstadoInvestigacion>({ estado: 'inactivo' })
+  const [pegado, setPegado] = useState<EstadoInvestigacion>({ estado: 'inactivo' })
+  const [correcciones, setCorrecciones] = useState<string[]>([])
   const [historial, setHistorial] = useState<Publicacion[]>(() => almacen.historial())
   const [idPublicacion, setIdPublicacion] = useState<string>(() => crypto.randomUUID())
   const ronda = useRef(0) // descarta respuestas de investigaciones anteriores
@@ -61,6 +67,9 @@ export default function App() {
   const ctx = useMemo(() => (perfil ? { v, perfil, beneficios: ajustes.beneficios, ubicacion: ajustes.ubicacion } : null), [v, perfil, ajustes])
   const titulos = useMemo(() => (ctx ? generarTitulos(ctx) : []), [ctx])
   const descripciones = useMemo(() => (ctx ? generarDescripciones(ctx) : []), [ctx])
+  const comentarios = useMemo(() => (ctx ? generarComentarios(ctx) : []), [ctx])
+  const placaNormal = normalizarPlaca(placa)
+  const placaOk = !placa.trim() || placaValida(placaNormal)
 
   /** Completa los campos vacíos con lo investigado (sobre el estado actual: el vendedor pudo editar mientras tanto). */
   function completarCon(r: Investigacion, origen: Origen) {
@@ -83,24 +92,61 @@ export default function App() {
     }
   }
 
-  async function generar() {
-    const a = analizar(texto)
-    const n = ++ronda.current
-    vActual.current = a.vehiculo
-    setV(a.vehiculo); setOrigenes(a.origenes); setGenerado(true); setIdPublicacion(crypto.randomUUID())
-    setGoogle({ estado: 'inactivo' })
-    setTimeout(() => resultadosRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
-    if (!a.vehiculo.modelo) { setWiki({ estado: 'inactivo' }); return }
+  async function buscarWikipedia(base: Vehiculo, n: number) {
+    if (!base.modelo) { setWiki({ estado: 'inactivo' }); return }
     setWiki({ estado: 'buscando' })
-    const enGoogle = buscarGoogle(a.vehiculo, n) // Google y Wikipedia se consultan a la vez
     try {
-      const r = await investigarWikipedia(a.vehiculo)
+      const r = await investigarWikipedia(base)
       if (n === ronda.current) { setWiki({ estado: 'listo', resultado: r }); completarCon(r, 'wikipedia') }
     } catch (e) {
       if (n === ronda.current) setWiki({ estado: 'error', error: 'No se pudo consultar Wikipedia. Revisa tu conexión a internet.' })
       console.error(e)
     }
-    await enGoogle
+  }
+
+  /** Consulta la placa en el SRI; si el navegador no puede, deja el panel para pegar el resultado. */
+  async function buscarPlaca(p: string, n: number) {
+    setSri({ estado: 'buscando' })
+    try {
+      const { base, rubros } = await consultarSri(p)
+      if (n !== ronda.current) return
+      const r = interpretarSri(p, base, rubros)
+      setSri({ estado: 'listo', resultado: r })
+      completarCon(r, 'sri')
+    } catch (e) {
+      if (n === ronda.current) setSri({ estado: 'error', error: (e as Error).message, sinAcceso: e instanceof ErrorPlaca && e.tipo === 'sin-acceso' })
+    }
+  }
+
+  async function generar() {
+    const a = analizar(texto)
+    const n = ++ronda.current
+    vActual.current = a.vehiculo
+    setV(a.vehiculo); setOrigenes(a.origenes); setGenerado(true); setIdPublicacion(crypto.randomUUID()); setCorrecciones(a.correcciones)
+    setGoogle({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' }); setSri({ estado: 'inactivo' }); setWiki({ estado: 'inactivo' })
+    setPlacaConsultada(placa.trim() ? placaNormal : '')
+    setTimeout(() => resultadosRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+    // Con placa: el SRI primero (puede ser la única fuente de marca y modelo). Si el texto ya trae el modelo, todo en paralelo.
+    const enPlaca = placa.trim() ? buscarPlaca(placaNormal, n) : Promise.resolve()
+    if (!a.vehiculo.modelo) await enPlaca
+    if (n !== ronda.current) return
+    const base = vActual.current
+    await Promise.all([enPlaca, buscarWikipedia(base, n), buscarGoogle(base, n)])
+  }
+
+  function pegarSri(t: string): boolean {
+    const r = interpretarPegado(placaConsultada, t)
+    if (!r) return false
+    setSri({ estado: 'listo', resultado: r })
+    completarCon(r, 'sri')
+    if (wiki.estado === 'inactivo' && vActual.current.modelo) buscarWikipedia(vActual.current, ronda.current)
+    return true
+  }
+
+  function pegarGoogle(t: string) {
+    const r = investigarTextoPegado(t, vActual.current)
+    setPegado({ estado: 'listo', resultado: r })
+    completarCon(r, 'google')
   }
 
   function cambiar<K extends keyof Vehiculo>(campo: K, valor: Vehiculo[K]) {
@@ -111,7 +157,7 @@ export default function App() {
   function aplicar(h: Hallazgo, opcion: string) {
     const campo = h.campo
     if (!campo) return
-    const origen: Origen = /wikipedia\.org/.test(h.fuente.url) ? 'wikipedia' : 'google'
+    const origen: Origen = /wikipedia\.org/.test(h.fuente.url) ? 'wikipedia' : /sri\.gob\.ec/.test(h.fuente.url) ? 'sri' : 'google'
     const valor = valorParaCampo(campo, opcion)
     if (campo === 'equipamiento') setV((cv) => ({ ...cv, equipamiento: cv.equipamiento.includes(valor) ? cv.equipamiento : [...cv.equipamiento, valor] }))
     else setV((cv) => ({ ...cv, [campo]: valor }))
@@ -120,15 +166,17 @@ export default function App() {
 
   function nuevo() {
     ronda.current++
-    setTexto(''); setV(VEHICULO_VACIO); setOrigenes({}); setGenerado(false)
-    setWiki({ estado: 'inactivo' }); setGoogle({ estado: 'inactivo' }); setIdPublicacion(crypto.randomUUID())
+    setTexto(''); setPlaca(''); setPlacaConsultada(''); setV(VEHICULO_VACIO); setOrigenes({}); setGenerado(false); setCorrecciones([])
+    setWiki({ estado: 'inactivo' }); setGoogle({ estado: 'inactivo' }); setSri({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' })
+    setIdPublicacion(crypto.randomUUID())
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function abrir(p: Publicacion) {
     ronda.current++
     setTexto(p.texto); setV(p.vehiculo); setOrigenes(p.origenes); setGenerado(true); setIdPublicacion(p.id)
-    setWiki({ estado: 'inactivo' }); setGoogle({ estado: 'inactivo' }); setVista('crear')
+    setWiki({ estado: 'inactivo' }); setGoogle({ estado: 'inactivo' }); setSri({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' })
+    setPlaca(''); setPlacaConsultada(''); setCorrecciones([]); setVista('crear')
   }
 
   if (!perfil) {
@@ -179,8 +227,13 @@ export default function App() {
               <p className="ayuda">Lo importante para identificarlo: marca, modelo, año, motor, transmisión, precio y lo que lo hace atractivo.</p>
               <textarea className="entrada" rows={4} value={texto} onChange={(e) => setTexto(e.target.value)}
                 placeholder="Ej.: Kia Rio 1.4 2016 manual, 85.000 km, aire, pantalla, matrícula 2025, $11.500 negociable" />
+              <label className="campo placa">
+                <span>Placa (opcional): completa marca, modelo, año, cilindraje, color y matrícula desde el SRI</span>
+                <input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())} placeholder="PBA1234" maxLength={9} autoCapitalize="characters" autoComplete="off" />
+                {!placaOk && <small className="error">Placa no válida: 3 letras y 3 o 4 números (autos) o 2 letras, 3 números y 1 letra (motos).</small>}
+              </label>
               <div className="fila">
-                <button type="button" className="boton principal grande" disabled={!texto.trim()} onClick={generar}>Generar publicación ✨</button>
+                <button type="button" className="boton principal grande" disabled={(!texto.trim() && !placa.trim()) || !placaOk} onClick={generar}>Generar publicación ✨</button>
                 {generado && <button type="button" className="boton secundario" onClick={nuevo}>Nuevo vehículo</button>}
               </div>
               {!texto && (
@@ -195,6 +248,7 @@ export default function App() {
               <>
                 <section className="tarjeta paso" ref={resultadosRef}>
                   <h2><span className="numero">2</span> Datos del vehículo</h2>
+                  {correcciones.map((c) => <p key={c} className="aviso">✏️ {c}. Si no era eso, corrígelo abajo.</p>)}
                   {faltantes.length > 0 && (
                     <p className="aviso">Faltan datos importantes: {faltantes.map((f) => NOMBRE_CAMPO[f]).join(', ')}. Complétalos para una publicación más completa.</p>
                   )}
@@ -203,13 +257,14 @@ export default function App() {
 
                 <section className="tarjeta paso">
                   <h2><span className="numero">3</span> Datos reales del modelo</h2>
-                  <PanelInvestigacion v={v} wikipedia={wiki} google={google} hayClaveGoogle={!!ajustes.claveGemini}
-                    investigarGoogle={() => buscarGoogle(v, ronda.current)} aplicar={aplicar} irAAjustes={() => setVista('ajustes')} />
+                  <PanelInvestigacion v={v} placa={placaConsultada} sri={sri} wikipedia={wiki} google={google} pegado={pegado}
+                    hayClaveGoogle={!!ajustes.claveGemini} investigarGoogle={() => buscarGoogle(v, ronda.current)}
+                    pegarSri={pegarSri} pegarGoogle={pegarGoogle} aplicar={aplicar} irAAjustes={() => setVista('ajustes')} />
                 </section>
 
                 <section className="tarjeta paso">
                   <h2><span className="numero">4</span> Publicación lista</h2>
-                  <Resultados v={v} titulos={titulos} descripciones={descripciones}
+                  <Resultados v={v} titulos={titulos} descripciones={descripciones} comentarios={comentarios}
                     alGuardar={(titulo, descripcion) => {
                       almacen.guardarEnHistorial({ id: idPublicacion, fecha: new Date().toISOString(), texto, vehiculo: v, origenes, titulo, descripcion })
                       setHistorial(almacen.historial())

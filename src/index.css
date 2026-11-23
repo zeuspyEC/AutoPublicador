@@ -106,6 +106,7 @@ textarea.entrada { font-size: 1.05rem; }
 .origen.texto { background: var(--primario-claro); color: var(--primario); }
 .origen.wikipedia { background: var(--superficie-2); color: var(--texto-2); border: 1px solid var(--borde); }
 .origen.google { background: var(--exito-claro); color: var(--exito); }
+.origen.sri { background: var(--primario); color: var(--superficie); }
 .origen.manual { background: var(--alerta-claro); color: var(--alerta); }
 .origen.falta { background: var(--alerta-claro); color: var(--alerta); }
 
@@ -197,3 +198,15 @@ textarea.entrada { font-size: 1.05rem; }
   .rejilla { grid-template-columns: 1fr 1fr; }
   .boton.grande { width: 100%; }
 }
+
+/* comentarios, pegar y placa */
+.comentarios { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .5rem; }
+.comentarios li { border: 1px solid var(--borde); border-radius: 12px; padding: .6rem .75rem; display: flex; flex-direction: column; gap: .3rem; align-items: flex-start; }
+.comentarios small { color: var(--texto-2); font-weight: 600; }
+.comentarios p { margin: 0; }
+.pegar { border: 1px dashed var(--borde); border-radius: 12px; padding: .7rem .8rem; margin: .6rem 0; width: 100%; }
+.campo.placa { margin-top: .8rem; }
+.campo.placa input { text-transform: uppercase; letter-spacing: .08em; font-weight: 600; max-width: 220px; }
+.diagnostico { list-style: none; padding: 0; margin: .5rem 0; display: flex; flex-direction: column; gap: .3rem; font-size: .9rem; }
+.diagnostico li { padding: .35rem .6rem; border-radius: 8px; background: var(--superficie-2); }
+.tarjeta-interna { background: var(--superficie-2); border-radius: 12px; padding: .7rem .8rem; margin-top: .6rem; }
