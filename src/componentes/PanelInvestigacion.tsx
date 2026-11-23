@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Hallazgo, Investigacion } from '../servicios/investigador'
 import { SRI_PAGINA, urlBaseSri } from '../servicios/placa'
 import type { Vehiculo } from '../dominio/tipos'
+import { valorParaCampo } from '../dominio/fusion'
 
 export type EstadoInvestigacion = { estado: 'inactivo' | 'buscando' | 'listo' | 'error'; resultado?: Investigacion; error?: string; sinAcceso?: boolean }
 
@@ -21,11 +22,7 @@ interface Props {
 }
 
 /** Valor que se pone en el campo a partir de una opción encontrada («Hatchback 3 y 5 puertas» → «Hatchback»). */
-export function valorParaCampo(campo: keyof Vehiculo, opcion: string): string {
-  // «Hatchback 3 y 5 puertas» o «Hatchback tres y cinco puertas» → «Hatchback»
-  if (campo === 'carroceria') return opcion.replace(/\s+(?:de\s+)?(?:\d|dos|tres|cuatro|cinco|seis|siete)\b.*$/i, '').replace(/:$/, '').trim()
-  return opcion.trim()
-}
+export { valorParaCampo }
 
 function yaAplicado(v: Vehiculo, h: Hallazgo, opcion: string): boolean {
   if (!h.campo) return false

@@ -182,3 +182,37 @@ describe('más variaciones: descripciones, títulos condicionales y comentarios'
     for (const x of c) expect(tieneNumeroLimpio(x.texto), x.id).toBe(false)
   })
 })
+
+describe('fusión: la placa (SRI) manda sobre el texto', () => {
+  it('caso real del usuario: texto «Chevrolet Corsa 2002» + placa registrada como Chevytaxi 2010', async () => {
+    const { fusionar } = await import('./fusion')
+    const { interpretarSri } = await import('../servicios/placa')
+    const a = analizar('CHEVROLET CORSA 5P A/C 1.4L 2002 10549')
+    const sri = interpretarSri('YAA0208', { codigoVehiculo: 1, descripcionMarca: 'CHEVROLET', descripcionModelo: 'CHEVYTAXI A/C', anioAuto: 2010, descripcionPais: 'ECUADOR', ultimoAnioPagado: 2026 }, [])
+    const f = fusionar(a.vehiculo, a.origenes, sri, 'sri')
+    expect(f.vehiculo.modelo).toBe('Chevytaxi')
+    expect(f.vehiculo.anio).toBe('2010')
+    expect(f.vehiculo.matricula).toBe('Al día 2026')
+    expect(f.vehiculo.precio).toBe('10549') // el precio sí viene del texto
+    expect(f.origenes.modelo).toBe('sri')
+    expect(f.diferencias.map((d) => `${d.campo}:${d.anterior}→${d.oficial}`)).toEqual(['modelo:Corsa→Chevytaxi', 'anio:2002→2010'])
+  })
+  it('lo corregido a mano no se pisa', async () => {
+    const { fusionar } = await import('./fusion')
+    const { interpretarSri } = await import('../servicios/placa')
+    const a = analizar('chevrolet aveo 2010')
+    const f = fusionar({ ...a.vehiculo, anio: '2011' }, { ...a.origenes, anio: 'manual' }, interpretarSri('PBA1234', { codigoVehiculo: 1, descripcionMarca: 'CHEVROLET', descripcionModelo: 'AVEO', anioAuto: 2010 }, []), 'sri')
+    expect(f.vehiculo.anio).toBe('2011')
+  })
+  it('las fuentes de referencia solo completan campos vacíos', async () => {
+    const { fusionar } = await import('./fusion')
+    const a = analizar('peugeot 206 2008 manual')
+    const r = { resumen: '', avisos: [], fuentes: [], hallazgos: [
+      { campo: 'transmision' as const, etiqueta: 'T', valor: 'Automática', opciones: ['Automática'], fuente: { nombre: 'x', url: 'https://es.wikipedia.org' } },
+      { campo: 'traccion' as const, etiqueta: 'T', valor: 'Delantera', opciones: ['Delantera'], fuente: { nombre: 'x', url: 'https://es.wikipedia.org' } }] }
+    const f = fusionar(a.vehiculo, a.origenes, r, 'wikipedia')
+    expect(f.vehiculo.transmision).toBe('Manual')
+    expect(f.vehiculo.traccion).toBe('Delantera')
+    expect(f.diferencias).toEqual([])
+  })
+})

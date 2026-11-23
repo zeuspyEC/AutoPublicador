@@ -3,7 +3,7 @@
 
 /** Marca → modelos (el más largo primero dentro de cada marca se resuelve en el analizador). */
 export const MODELOS: Record<string, string[]> = {
-  Chevrolet: ['Grand Vitara SZ', 'Grand Vitara', 'Vitara', 'Aveo Family', 'Aveo Emotion', 'Aveo Activo', 'Aveo', 'Spark GT', 'Spark',
+  Chevrolet: ['Chevytaxi', 'Grand Vitara SZ', 'Grand Vitara', 'Vitara', 'Aveo Family', 'Aveo Emotion', 'Aveo Activo', 'Aveo', 'Spark GT', 'Spark',
     'Sail', 'Optra', 'Corsa Evolution', 'Corsa', 'Cruze', 'Captiva', 'Tracker', 'Trailblazer', 'D-Max', 'Luv D-Max', 'Luv',
     'Onix', 'Beat', 'Sonic', 'Esteem', 'Forsa', 'Swift', 'Rodeo', 'Blazer', 'N300', 'Colorado', 'Equinox', 'Groove'],
   Suzuki: ['Grand Vitara', 'Vitara', 'Jimny', 'Swift', 'SX4', 'Celerio', 'Alto', 'Ertiga', 'S-Presso', 'Baleno', 'Forsa', 'Samurai'],
@@ -112,6 +112,7 @@ export const PROCEDENCIAS: Record<string, string> = {
  */
 export const ARTICULO_EQUIVALENTE: Record<string, string> = {
   'mazda allegro': 'Mazda 323',
+  'chevrolet chevytaxi': 'Chevrolet Aveo', // «Un taxi llamado Chevytaxi se basa en el sedán T200» (Wikipedia)
   'chevrolet vitara': 'Suzuki Vitara',
   'chevrolet grand vitara': 'Suzuki Grand Vitara',
   'chevrolet grand vitara sz': 'Suzuki Grand Vitara',

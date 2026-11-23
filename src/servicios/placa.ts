@@ -27,6 +27,8 @@ export interface BaseSri {
   fechaUltimaMatricula?: string
   fechaCaducidadMatricula?: string
   prohibidoEnajenar?: string
+  descripcionCanton?: string
+  fechaRevision?: string
   observacion?: string
 }
 export interface RubroSri { descripcionRubro?: string; valorRubro?: number; anioDesdePago?: number; anioHastaPago?: number; nombreCortoBeneficiario?: string }
@@ -85,8 +87,49 @@ const titulo = (s?: string) => (s ?? '').toLowerCase().replace(/(^|\s|-)(\p{L})/
 const CLASES: Record<string, string> = { JEEP: 'SUV', CAMIONETA: 'Camioneta', 'VEHICULO UTILITARIO': 'SUV', FURGONETA: 'Furgoneta', AUTOMOVIL: '', AUTOMÓVIL: '',
   MOTOCICLETA: 'Moto', MOTO: 'Moto', CUADRON: 'Cuadrón', 'CUADRÓN': 'Cuadrón', TRICIMOTO: 'Tricimoto' }
 
+/**
+ * Lectura tolerante de la respuesta: el SRI no siempre usa los mismos nombres de campo (y algunos vienen anidados),
+ * así que cada dato se busca por su significado («color…», «cilindr…», «clase…») además del nombre conocido.
+ */
+export function normalizarBase(crudo: Record<string, unknown>): BaseSri {
+  const planos: [string, unknown][] = []
+  const recorrer = (o: Record<string, unknown>, nivel: number) => {
+    for (const [k, v] of Object.entries(o ?? {})) {
+      if (v && typeof v === 'object' && !Array.isArray(v) && nivel < 2) recorrer(v as Record<string, unknown>, nivel + 1)
+      else planos.push([k.toLowerCase(), v])
+    }
+  }
+  recorrer(crudo, 0)
+  const buscar = (...patrones: RegExp[]) => {
+    for (const re of patrones) {
+      const e = planos.find(([k, v]) => re.test(k) && v !== null && v !== undefined && String(v).trim() !== '' && String(v) !== '0')
+      if (e) return e[1] as string
+    }
+    return undefined
+  }
+  return {
+    codigoVehiculo: buscar(/^codigovehiculo$/) as unknown as number,
+    descripcionMarca: buscar(/^descripcionmarca$/, /marca/),
+    descripcionModelo: buscar(/^descripcionmodelo$/, /^modelo$/, /modelo(?!.*codigo)/),
+    anioAuto: buscar(/^anioauto$/, /^aniomodelo$/, /^anio(fabricacion)?$/, /^a[ñn]o/),
+    descripcionPais: buscar(/^descripcionpais$/, /pais/),
+    colorVehiculo1: buscar(/^colorvehiculo1$/, /^color1?$/, /color(?!.*2)/),
+    colorVehiculo2: buscar(/^colorvehiculo2$/, /color.*2/),
+    cilindraje: buscar(/^cilindraje$/, /cilindr/),
+    nombreClase: buscar(/^nombreclase$/, /clase/),
+    descripcionServicio: buscar(/^descripcionservicio$/, /servicio/),
+    ultimoAnioPagado: buscar(/^ultimoaniopagado$/, /ultimo.*anio|anio.*pag/),
+    fechaCaducidadMatricula: buscar(/^fechacaducidadmatricula$/, /caducidad/),
+    fechaUltimaMatricula: buscar(/^fechaultimamatricula$/),
+    prohibidoEnajenar: buscar(/^prohibidoenajenar$/, /enajenar/),
+    descripcionCanton: buscar(/^descripcioncanton$/, /canton/),
+    fechaRevision: buscar(/^fecharevision$/, /revision/),
+  } as BaseSri
+}
+
 /** Convierte la respuesta del SRI en hallazgos aplicables (fuente: SRI) y avisos para el vendedor. */
-export function interpretarSri(placa: string, base: BaseSri, rubros: RubroSri[]): Investigacion {
+export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[]): Investigacion {
+  const base = normalizarBase(crudo as Record<string, unknown>)
   const fuente = { nombre: `SRI · placa ${placa}`, url: urlBaseSri(placa) }
   const h: Hallazgo[] = []
   const add = (campo: Hallazgo['campo'], etiqueta: string, valor: string | undefined, opcion?: string) => {
@@ -111,13 +154,18 @@ export function interpretarSri(placa: string, base: BaseSri, rubros: RubroSri[])
   if (a.traccion) add('traccion', 'Tracción', a.traccion, a.traccion)
   for (const e of a.equipamiento) add('equipamiento', 'Equipamiento (según el modelo registrado)', e, e)
   const color = titulo(base.colorVehiculo1)
-  add('color', 'Color', color + (base.colorVehiculo2 && base.colorVehiculo2 !== base.colorVehiculo1 ? ` / ${titulo(base.colorVehiculo2)}` : ''), color)
+  if (color) add('color', 'Color', color + (base.colorVehiculo2 && base.colorVehiculo2 !== base.colorVehiculo1 ? ` / ${titulo(base.colorVehiculo2)}` : ''), color)
   add('procedencia', 'País de origen', titulo(base.descripcionPais), titulo(base.descripcionPais))
   const clase = (base.nombreClase ?? '').toUpperCase().trim()
   add('carroceria', 'Clase', titulo(clase), CLASES[clase] || undefined)
   add(null, 'Servicio', titulo(base.descripcionServicio))
+  add(null, 'Matriculado en', titulo(base.descripcionCanton))
+  if (base.fechaRevision) add(null, 'Última revisión vehicular', String(base.fechaRevision).slice(0, 10))
 
   const avisos: string[] = []
+  const servicio = (base.descripcionServicio ?? '').toUpperCase()
+  if (servicio && !/PARTICULAR/.test(servicio))
+    avisos.push(`El SRI registra el servicio «${titulo(servicio)}» (no particular): menciónalo con claridad o revisa el cambio de servicio antes de publicar.`)
   const deuda = rubros.reduce((s, r) => s + (+(r.valorRubro ?? 0) || 0), 0)
   const pagado = String(base.ultimoAnioPagado ?? '').match(/\d{4}/)?.[0]
   if (deuda > 0) {

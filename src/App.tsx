@@ -9,34 +9,20 @@ import { Ajustes } from './componentes/Ajustes'
 import { FormPerfil } from './componentes/FormPerfil'
 import { FormVehiculo } from './componentes/FormVehiculo'
 import { Historial } from './componentes/Historial'
-import { PanelInvestigacion, valorParaCampo, type EstadoInvestigacion } from './componentes/PanelInvestigacion'
+import { PanelInvestigacion, type EstadoInvestigacion } from './componentes/PanelInvestigacion'
+import { fusionar, valorParaCampo, type Diferencia } from './dominio/fusion'
 import { Resultados } from './componentes/Resultados'
 
 type Vista = 'crear' | 'historial' | 'ajustes'
 
 const IMPORTANTES: (keyof Vehiculo)[] = ['marca', 'modelo', 'anio', 'motor', 'transmision', 'precio']
-const NOMBRE_CAMPO: Partial<Record<keyof Vehiculo, string>> = { marca: 'marca', modelo: 'modelo', anio: 'año', motor: 'motor', transmision: 'transmisión', precio: 'precio' }
+const NOMBRE_CAMPO: Partial<Record<keyof Vehiculo, string>> = { marca: 'marca', modelo: 'modelo', anio: 'año', motor: 'motor', transmision: 'transmisión', precio: 'precio', color: 'color', procedencia: 'procedencia', matricula: 'matrícula', carroceria: 'carrocería' }
 
 const EJEMPLOS = [
   'Peugeot 206 XT 1.6 2008 procedencia argentina, techo corredizo, pantalla android, cámara de retro, aros. Matrícula 2025 cero multas. $4990 antes $5300, negociable, recibo carro o moto, a toda prueba',
   'Chevrolet Vitara clásico 3P DLX 1997 T/M A/A ecuatoriano, matrícula al día 2025, cero multas, 4990',
   'Toyota Hilux 2.5 2014 diésel 4x4 cabina doble 145.000 km, único dueño, $28500 negociable',
 ]
-
-/**
- * Autocompletado: un dato investigado se aplica solo si el campo está vacío y hay una única opción
- * (p. ej., la tracción de un modelo que solo existió con tracción delantera). Si hay varias, decide el vendedor.
- */
-function autocompletar(v: Vehiculo, r: Investigacion, origen: Origen): [Vehiculo, Origenes] {
-  const nv = { ...v }
-  const no: Origenes = {}
-  for (const h of r.hallazgos) {
-    if (!h.campo || h.campo === 'equipamiento' || !h.opciones || h.opciones.length !== 1 || nv[h.campo]) continue
-    ;(nv as Record<string, unknown>)[h.campo] = valorParaCampo(h.campo, h.opciones[0])
-    no[h.campo] = origen
-  }
-  return [nv, no]
-}
 
 export default function App() {
   const [perfil, setPerfil] = useState<Perfil | null>(() => almacen.perfil())
@@ -54,6 +40,7 @@ export default function App() {
   const [sri, setSri] = useState<EstadoInvestigacion>({ estado: 'inactivo' })
   const [pegado, setPegado] = useState<EstadoInvestigacion>({ estado: 'inactivo' })
   const [correcciones, setCorrecciones] = useState<string[]>([])
+  const [diferencias, setDiferencias] = useState<Diferencia[]>([])
   const [historial, setHistorial] = useState<Publicacion[]>(() => almacen.historial())
   const [placas, setPlacas] = useState<PlacaConsultada[]>(() => almacen.placas())
   const [idPublicacion, setIdPublicacion] = useState<string>(() => crypto.randomUUID())
@@ -73,11 +60,27 @@ export default function App() {
   const placaOk = !placa.trim() || placaValida(placaNormal)
 
   /** Completa los campos vacíos con lo investigado (sobre el estado actual: el vendedor pudo editar mientras tanto). */
+  const origenesActuales = useRef(origenes)
+  origenesActuales.current = origenes
+
+  /** Fusiona lo investigado: el SRI manda sobre el texto (y se informan las diferencias); el resto solo completa vacíos. */
   function completarCon(r: Investigacion, origen: Origen) {
-    const [nv, no] = autocompletar(vActual.current, r, origen)
+    const f = fusionar(vActual.current, origenesActuales.current, r, origen)
+    vActual.current = f.vehiculo
+    origenesActuales.current = f.origenes
+    setV(f.vehiculo)
+    setOrigenes(f.origenes)
+    if (f.diferencias.length) setDiferencias((d) => [...d.filter((x) => !f.diferencias.some((y) => y.campo === x.campo)), ...f.diferencias])
+  }
+
+  /** Deshace la prioridad del SRI: vuelve a los valores del texto. */
+  function usarTexto() {
+    const nv = { ...vActual.current }
+    for (const d of diferencias) (nv as unknown as Record<string, unknown>)[d.campo] = d.anterior
     vActual.current = nv
     setV(nv)
-    setOrigenes((co) => ({ ...co, ...no }))
+    setOrigenes((co) => { const n = { ...co }; for (const d of diferencias) n[d.campo] = 'texto'; return n })
+    setDiferencias([])
   }
 
   async function buscarGoogle(base: Vehiculo, n: number) {
@@ -124,16 +127,16 @@ export default function App() {
     const a = analizar(texto)
     const n = ++ronda.current
     vActual.current = a.vehiculo
-    setV(a.vehiculo); setOrigenes(a.origenes); setGenerado(true); setIdPublicacion(crypto.randomUUID()); setCorrecciones(a.correcciones)
+    setV(a.vehiculo); setOrigenes(a.origenes); setGenerado(true); setIdPublicacion(crypto.randomUUID()); setCorrecciones(a.correcciones); setDiferencias([]); origenesActuales.current = a.origenes
     setGoogle({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' }); setSri({ estado: 'inactivo' }); setWiki({ estado: 'inactivo' })
     setPlacaConsultada(placa.trim() ? placaNormal : '')
     setTimeout(() => resultadosRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
     // Con placa: el SRI primero (puede ser la única fuente de marca y modelo). Si el texto ya trae el modelo, todo en paralelo.
-    const enPlaca = placa.trim() ? buscarPlaca(placaNormal, n) : Promise.resolve()
-    if (!a.vehiculo.modelo) await enPlaca
+    // Con placa, el SRI va primero: Wikipedia y Google investigan el vehículo que realmente registra esa placa
+    if (placa.trim()) await buscarPlaca(placaNormal, n)
     if (n !== ronda.current) return
     const base = vActual.current
-    await Promise.all([enPlaca, buscarWikipedia(base, n), buscarGoogle(base, n)])
+    await Promise.all([buscarWikipedia(base, n), buscarGoogle(base, n)])
   }
 
   /** Guarda la placa en el historial de placas consultadas (la más reciente primero). */
@@ -146,7 +149,7 @@ export default function App() {
   function usarPlaca(p: PlacaConsultada) {
     const n = ++ronda.current
     vActual.current = VEHICULO_VACIO
-    setTexto(''); setPlaca(p.placa); setPlacaConsultada(p.placa); setCorrecciones([]); setOrigenes({}); setV(VEHICULO_VACIO)
+    setTexto(''); setPlaca(p.placa); setPlacaConsultada(p.placa); setCorrecciones([]); setDiferencias([]); setOrigenes({}); origenesActuales.current = {}; setV(VEHICULO_VACIO)
     setGoogle({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' }); setWiki({ estado: 'inactivo' })
     setSri({ estado: 'listo', resultado: p.resultado })
     completarCon(p.resultado, 'sri')
@@ -188,7 +191,7 @@ export default function App() {
 
   function nuevo() {
     ronda.current++
-    setTexto(''); setPlaca(''); setPlacaConsultada(''); setV(VEHICULO_VACIO); setOrigenes({}); setGenerado(false); setCorrecciones([])
+    setTexto(''); setPlaca(''); setPlacaConsultada(''); setV(VEHICULO_VACIO); setOrigenes({}); setGenerado(false); setCorrecciones([]); setDiferencias([])
     setWiki({ estado: 'inactivo' }); setGoogle({ estado: 'inactivo' }); setSri({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' })
     setIdPublicacion(crypto.randomUUID())
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -198,7 +201,7 @@ export default function App() {
     ronda.current++
     setTexto(p.texto); setV(p.vehiculo); setOrigenes(p.origenes); setGenerado(true); setIdPublicacion(p.id)
     setWiki({ estado: 'inactivo' }); setGoogle({ estado: 'inactivo' }); setSri({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' })
-    setPlaca(''); setPlacaConsultada(''); setCorrecciones([]); setVista('crear')
+    setPlaca(''); setPlacaConsultada(''); setCorrecciones([]); setDiferencias([]); setVista('crear')
   }
 
   if (!perfil) {
@@ -272,6 +275,13 @@ export default function App() {
               <>
                 <section className="tarjeta paso" ref={resultadosRef}>
                   <h2><span className="numero">2</span> Datos del vehículo</h2>
+                  {diferencias.length > 0 && (
+                    <div className="aviso">
+                      🪪 La placa {placaConsultada} está registrada en el SRI con datos distintos a tu texto; se usaron los del SRI:
+                      <ul>{diferencias.map((d) => <li key={d.campo}>{NOMBRE_CAMPO[d.campo] ?? d.campo}: «{d.anterior}» → «{d.oficial}»</li>)}</ul>
+                      <button type="button" className="enlace" onClick={usarTexto}>Usar los datos de mi texto</button>
+                    </div>
+                  )}
                   {correcciones.map((c) => <p key={c} className="aviso">✏️ {c}. Si no era eso, corrígelo abajo.</p>)}
                   {faltantes.length > 0 && (
                     <p className="aviso">Faltan datos importantes: {faltantes.map((f) => NOMBRE_CAMPO[f]).join(', ')}. Complétalos para una publicación más completa.</p>

@@ -133,3 +133,20 @@ describe('placa: motos, diagnóstico y resumen', () => {
     expect(resumenDePlaca(interpretarSri('PBA1234', BASE, []))).toBe('Chevrolet Aveo Family 2015 · Plateado')
   })
 })
+
+describe('placa: lectura tolerante de la respuesta', () => {
+  it('encuentra los datos aunque cambien los nombres de campo o vengan anidados', () => {
+    const r = interpretarSri('YAA0208', { vehiculo: { marca: 'CHEVROLET', modelo: 'CHEVYTAXI A/C', anioModelo: '2010', cilindrajeMotor: '1498', color: 'AMARILLO', clase: 'AUTOMOVIL', servicio: 'ALQUILER', canton: 'QUITO' }, ultimoAnioPagado: 2026 } as unknown as BaseSri, [])
+    expect(campo(r, 'modelo')[0].opciones).toEqual(['Chevytaxi'])
+    expect(campo(r, 'anio')[0].opciones).toEqual(['2010'])
+    expect(campo(r, 'motor')[0].opciones).toEqual(['1.5'])
+    expect(campo(r, 'color')[0].opciones).toEqual(['Amarillo'])
+    expect(r.hallazgos.find((h) => h.etiqueta === 'Matriculado en')?.valor).toBe('Quito')
+    expect(r.avisos.join(' ')).toMatch(/servicio «Alquiler» \(no particular\)/)
+  })
+  it('ignora ceros y vacíos (cilindraje 0 no se ofrece)', () => {
+    const r = interpretarSri('PBA1234', { ...BASE, cilindraje: 0, colorVehiculo1: '' }, [])
+    expect(campo(r, 'motor')).toEqual([])
+    expect(campo(r, 'color')).toEqual([])
+  })
+})
