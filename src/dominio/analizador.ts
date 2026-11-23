@@ -98,7 +98,7 @@ export function analizar(texto: string): Analisis {
   // --- Transmisión y combustible ---
   // «TM» / «TA»: abreviaturas del SRI y de muchos vendedores (transmisión manual / automática)
   if (/\b(autom[aá]tic[oa]|a\/t|tiptronic|cvt|caja autom)|\bta\b/.test(t)) poner('transmision', 'Automática')
-  else if (/\b(manual|mec[aá]nic[oa]|t\/m|est[aá]ndar|sincr[oó]nic)|\btm\b/.test(t) && !/mec[aá]nico de confianza|tu mec[aá]nico/.test(t)) poner('transmision', 'Manual')
+  else if (/\b(manual|mec[aá]nic[oa]|t\/m|m\/t|est[aá]ndar|sincr[oó]nic)|\btm\b/.test(t) && !/mec[aá]nico de confianza|tu mec[aá]nico/.test(t)) poner('transmision', 'Manual')
   const comb = plano.match(/\b(gasolina|diesel|hibrido|electrico|glp|gnv)\b/)
   if (comb) poner('combustible', { gasolina: 'Gasolina', diesel: 'Diésel', hibrido: 'Híbrido', electrico: 'Eléctrico', glp: 'GLP', gnv: 'GNV' }[comb[1]]!)
 
@@ -148,10 +148,11 @@ export function analizar(texto: string): Analisis {
       const tolerancia = escrito.length >= 6 ? 2 : 1
       const parecido = (MODELOS[marca] ?? []).filter((m) => !/\s/.test(m))
         .map((m) => ({ m, d: distancia(escrito, sinTildes(m.toLowerCase())) }))
-        .filter((x) => escrito.length >= 4 && x.d > 0 && x.d <= tolerancia)
+        // Los códigos con números («N200», «F-370») son nombres exactos: nunca se «corrigen» a otro modelo
+        .filter((x) => escrito.length >= 4 && !/\d/.test(escrito) && x.d > 0 && x.d <= tolerancia)
         .sort((a, b) => a.d - b.d)[0]
       if (parecido) { modelo = parecido.m; correcciones.push(`«${escrito}» se corrigió a «${parecido.m}»`) }
-      else modelo = escrito.length <= 3 ? escrito.toUpperCase() : escrito[0].toUpperCase() + escrito.slice(1)
+      else modelo = escrito.length <= 3 || /\d/.test(escrito) ? escrito.toUpperCase() : escrito[0].toUpperCase() + escrito.slice(1)
     }
   }
   if (marca) poner('marca', marca)
