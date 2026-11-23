@@ -7,6 +7,22 @@ export interface Analisis {
   vehiculo: Vehiculo
   origenes: Origenes
   faltantes: (keyof Vehiculo)[] // datos importantes que no se encontraron
+  correcciones: string[] // p. ej., «alegro» se corrigió a «Allegro»
+}
+
+/** Distancia de edición (Levenshtein): cuántas letras hay que cambiar para pasar de una palabra a otra. */
+export function distancia(a: string, b: string): number {
+  const f = Array.from({ length: b.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= a.length; i++) {
+    let diag = f[0]
+    f[0] = i
+    for (let j = 1; j <= b.length; j++) {
+      const previo = f[j]
+      f[j] = Math.min(f[j] + 1, f[j - 1] + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1))
+      diag = previo
+    }
+  }
+  return f[b.length]
 }
 
 /** Modelos que también son palabras comunes del español: solo se aceptan si la marca está escrita. */
@@ -30,6 +46,7 @@ function anioDeDosDigitos(n: number): string {
 export function analizar(texto: string): Analisis {
   const v: Vehiculo = { ...VEHICULO_VACIO, equipamiento: [] }
   const o: Origenes = {}
+  const correcciones: string[] = []
   const poner = <K extends keyof Vehiculo>(k: K, valor: Vehiculo[K]) => { v[k] = valor; o[k] = 'texto' }
 
   const original = (texto || '').replace(/\s+/g, ' ').trim()
@@ -122,7 +139,17 @@ export function analizar(texto: string): Analisis {
   if (marca && !modelo) {
     // Modelo no catalogado: la palabra que sigue a la marca
     const sig = plano.match(new RegExp(`\\b${escapar(sinTildes(marca.toLowerCase()))}\\s+([a-z0-9-]+)`))
-    if (sig && !/^(19|20)\d\d$/.test(sig[1]) && !/^\d[.,]\d$/.test(sig[1])) modelo = sig[1].length <= 3 ? sig[1].toUpperCase() : sig[1][0].toUpperCase() + sig[1].slice(1)
+    if (sig && !/^(19|20)\d\d$/.test(sig[1]) && !/^\d[.,]\d$/.test(sig[1])) {
+      // ¿Error de tipeo de un modelo conocido de la marca? («alegro» → «Allegro»)
+      const escrito = sig[1]
+      const tolerancia = escrito.length >= 6 ? 2 : 1
+      const parecido = (MODELOS[marca] ?? []).filter((m) => !/\s/.test(m))
+        .map((m) => ({ m, d: distancia(escrito, sinTildes(m.toLowerCase())) }))
+        .filter((x) => escrito.length >= 4 && x.d > 0 && x.d <= tolerancia)
+        .sort((a, b) => a.d - b.d)[0]
+      if (parecido) { modelo = parecido.m; correcciones.push(`«${escrito}» se corrigió a «${parecido.m}»`) }
+      else modelo = escrito.length <= 3 ? escrito.toUpperCase() : escrito[0].toUpperCase() + escrito.slice(1)
+    }
   }
   if (marca) poner('marca', marca)
   if (modelo) poner('modelo', modelo === 'Río' ? 'Rio' : modelo === 'Rav 4' ? 'RAV4' : modelo)
@@ -149,5 +176,5 @@ export function analizar(texto: string): Analisis {
   if (notas.length) poner('notas', notas.join(', '))
 
   const importantes: (keyof Vehiculo)[] = ['marca', 'modelo', 'anio', 'motor', 'transmision', 'precio']
-  return { vehiculo: v, origenes: o, faltantes: importantes.filter((k) => !v[k]) }
+  return { vehiculo: v, origenes: o, faltantes: importantes.filter((k) => !v[k]), correcciones }
 }

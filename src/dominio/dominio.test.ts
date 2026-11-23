@@ -129,3 +129,22 @@ describe('plantillas', () => {
     for (const x of d) expect(x.texto).not.toMatch(/HORARIO|Atiendo|ATENDEMOS/)
   })
 })
+
+describe('corrección de errores de tipeo y valores de carrocería', () => {
+  it('«Mazda Alegro» se corrige a «Allegro» y lo informa', () => {
+    const a = analizar('mazda alegro 1.6 2004 manual 4490')
+    expect(a.vehiculo.modelo).toBe('Allegro')
+    expect(a.correcciones).toEqual(['«alegro» se corrigió a «Allegro»'])
+  })
+  it('no «corrige» modelos que no se parecen a ninguno', () => {
+    const a = analizar('mazda tribute 2008')
+    expect(a.vehiculo.modelo).toBe('Tribute')
+    expect(a.correcciones).toEqual([])
+  })
+  it('carrocería con números en letras', async () => {
+    const { valorParaCampo } = await import('../componentes/PanelInvestigacion')
+    expect(valorParaCampo('carroceria', 'Hatchback tres y cinco puertas')).toBe('Hatchback')
+    expect(valorParaCampo('carroceria', 'Sedán 4 puertas')).toBe('Sedán')
+    expect(valorParaCampo('carroceria', 'Familiar de cinco puertas')).toBe('Familiar')
+  })
+})

@@ -95,3 +95,28 @@ export const PROCEDENCIAS: Record<string, string> = {
   argentin: 'Argentina', brasil: 'Brasil', colombian: 'Colombia', ecuatorian: 'Ecuador', japon: 'Japón', corean: 'Corea',
   chilen: 'Chile', mexican: 'México', chin: 'China', venezolan: 'Venezuela', americano: 'Estados Unidos', gringo: 'Estados Unidos',
 }
+
+/**
+ * Nombres comerciales de Ecuador → nombre con el que el modelo aparece en Wikipedia
+ * (p. ej., el Mazda Allegro es el Mazda 323; el Chevrolet Esteem es el Suzuki Baleno).
+ */
+export const ARTICULO_EQUIVALENTE: Record<string, string> = {
+  'mazda allegro': 'Mazda 323',
+  'chevrolet vitara': 'Suzuki Vitara',
+  'chevrolet grand vitara': 'Suzuki Grand Vitara',
+  'chevrolet grand vitara sz': 'Suzuki Grand Vitara',
+  'chevrolet aveo family': 'Chevrolet Aveo',
+  'chevrolet aveo emotion': 'Chevrolet Aveo',
+  'chevrolet aveo activo': 'Chevrolet Aveo',
+  'chevrolet luv d-max': 'Isuzu D-Max',
+  'chevrolet d-max': 'Isuzu D-Max',
+  'chevrolet luv': 'Isuzu Faster',
+  'chevrolet esteem': 'Suzuki Baleno',
+  'chevrolet forsa': 'Suzuki Cultus',
+  'chevrolet swift': 'Suzuki Swift',
+  'chevrolet optra': 'Daewoo Lacetti',
+  'chevrolet corsa evolution': 'Chevrolet Corsa',
+  'fiat premio': 'Fiat Duna',
+  'kia pregio': 'Kia Pregio',
+  'renault sandero stepway': 'Renault Sandero',
+}

@@ -31,4 +31,10 @@ describe.runIf(activa)('investigación real en Wikipedia', () => {
     expect(r.fuentes.length).toBeGreaterThan(0)
     expect(r.hallazgos.find((h) => h.campo === 'traccion')?.opciones).toContain('4x4')
   }, 30000)
+  it('Mazda Alegro (mal escrito, nombre de Ecuador): encuentra el Mazda 323', async () => {
+    const { vehiculo } = analizar('mazda alegro 1.6 2004')
+    const r = await investigarWikipedia(vehiculo)
+    expect(r.fuentes[0]?.url).toContain('Mazda_323')
+    expect(r.avisos[0]).toMatch(/internacionalmente como Mazda 323/)
+  }, 30000)
 })

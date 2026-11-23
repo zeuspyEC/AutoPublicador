@@ -3,6 +3,7 @@
 //  1) Wikipedia en español e inglés (gratis, sin clave): ficha técnica del modelo.
 //  2) Google mediante Gemini con «búsqueda de Google» (opcional, con clave gratuita de Google AI Studio):
 //     datos de la versión y el año exactos, con los enlaces que Google usó.
+import { ARTICULO_EQUIVALENTE } from '../dominio/catalogo'
 import type { Vehiculo } from '../dominio/tipos'
 import { camposFicha, cilindradas, rangosAnios, traccionDe } from './wikitexto'
 
@@ -39,9 +40,14 @@ async function json(pedir: Pedir, url: string) {
 /** Busca el artículo del modelo y devuelve su título (solo si menciona el modelo) y el wikitexto de la cabecera. */
 async function articulo(pedir: Pedir, idioma: 'es' | 'en', consulta: string, modelo: string) {
   const api = `https://${idioma}.wikipedia.org/w/api.php?format=json&origin=*`
-  const s = await json(pedir, `${api}&action=query&list=search&srlimit=5&srsearch=${encodeURIComponent(consulta)}`)
-  const titulos: string[] = (s?.query?.search ?? []).map((x: { title: string }) => x.title)
-  const titulo = titulos.find((t) => sinTildes(t).includes(sinTildes(modelo)))
+  const buscar = async (q: string) => {
+    const s = await json(pedir, `${api}&action=query&list=search&srlimit=5&srinfo=suggestion&srsearch=${encodeURIComponent(q)}`)
+    const titulos: string[] = (s?.query?.search ?? []).map((x: { title: string }) => x.title)
+    return { titulo: titulos.find((t) => sinTildes(t).includes(sinTildes(modelo))), sugerencia: s?.query?.searchinfo?.suggestion as string | undefined }
+  }
+  let { titulo, sugerencia } = await buscar(consulta)
+  // Si no hay resultado, se usa la corrección que propone Wikipedia («mazda alegro» → «mazda allegro»)
+  if (!titulo && sugerencia) titulo = (await buscar(sugerencia)).titulo
   if (!titulo) return null
   const r = await json(pedir, `${api}&action=query&prop=revisions&rvprop=content&rvslots=main&rvsection=0&redirects=1&titles=${encodeURIComponent(titulo)}`)
   const pagina = Object.values(r?.query?.pages ?? {})[0] as { title?: string; revisions?: { slots: { main: { '*': string } } }[] }
@@ -63,10 +69,15 @@ export async function investigarWikipedia(v: Vehiculo, pedir: Pedir = fetch): Pr
   const res: Investigacion = { resumen: '', hallazgos: [], avisos: [], fuentes: [] }
   if (!v.modelo) { res.avisos.push('Falta el modelo para poder investigar.'); return res }
   const nombre = `${v.marca} ${v.modelo}`.trim()
+  // Nombre comercial de Ecuador → nombre del artículo (Mazda Allegro → Mazda 323)
+  const equivalente = ARTICULO_EQUIVALENTE[sinTildes(nombre)]
+  const buscado = equivalente ?? nombre
+  const modeloBuscado = equivalente ? equivalente.split(' ').slice(1).join(' ') : v.modelo
+  if (equivalente) res.avisos.push(`El ${nombre} se conoce internacionalmente como ${equivalente}; se muestran los datos de ese modelo.`)
 
   const [es, en] = await Promise.all([
-    articulo(pedir, 'es', `${nombre} automóvil`, v.modelo).catch(() => null),
-    articulo(pedir, 'en', `${nombre} car`, v.modelo).catch(() => null),
+    articulo(pedir, 'es', `${buscado} automóvil`, modeloBuscado).catch(() => null),
+    articulo(pedir, 'en', `${buscado} car`, modeloBuscado).catch(() => null),
   ])
 
   if (es) {
@@ -90,7 +101,7 @@ export async function investigarWikipedia(v: Vehiculo, pedir: Pedir = fetch): Pr
     add(null, 'Peso', f['peso'])
     add(null, 'Largo', f['largo'] ?? f['longitud'])
     res.resumen = await resumenWikipedia(pedir, es.titulo)
-    if (!sinTildes(es.titulo).includes(sinTildes(v.marca || ''))) res.avisos.push(`En Wikipedia el modelo aparece como «${es.titulo}».`)
+    if (!equivalente && !sinTildes(es.titulo).includes(sinTildes(v.marca || ''))) res.avisos.push(`En Wikipedia el modelo aparece como «${es.titulo}».`)
 
     const periodo = f['período'] ?? f['periodo'] ?? ''
     const rangos = rangosAnios(periodo)

@@ -15,7 +15,8 @@ interface Props {
 
 /** Valor que se pone en el campo a partir de una opción encontrada («Hatchback 3 y 5 puertas» → «Hatchback»). */
 export function valorParaCampo(campo: keyof Vehiculo, opcion: string): string {
-  if (campo === 'carroceria') return opcion.replace(/\s*\d.*$/, '').replace(/:$/, '').trim()
+  // «Hatchback 3 y 5 puertas» o «Hatchback tres y cinco puertas» → «Hatchback»
+  if (campo === 'carroceria') return opcion.replace(/\s+(?:de\s+)?(?:\d|dos|tres|cuatro|cinco|seis|siete)\b.*$/i, '').replace(/:$/, '').trim()
   return opcion.trim()
 }
 
