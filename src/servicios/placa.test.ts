@@ -43,7 +43,7 @@ describe('placa: interpretación de la respuesta del SRI', () => {
   it('con valores pendientes no ofrece «matrícula al día» y lo avisa', () => {
     const r = interpretarSri('PBA1234', BASE, [{ descripcionRubro: 'IMPUESTO A LA PROPIEDAD', valorRubro: 45.5 }, { descripcionRubro: 'TASA ANT', valorRubro: 22 }])
     expect(campo(r, 'matricula')).toEqual([])
-    expect(r.avisos[0]).toMatch(/valores pendientes en el SRI por \$67\.50/)
+    expect(r.avisos[0]).toMatch(/pendiente en el SRI: \$67\.50/)
   })
   it('avisa la prohibición de enajenar', () => {
     expect(interpretarSri('PBA1234', { ...BASE, prohibidoEnajenar: 'S' }, []).avisos.join(' ')).toMatch(/prohibición de enajenar/)
@@ -82,7 +82,7 @@ describe('placa: consulta directa', () => {
     const r = await consultarSri('PBA1234', async (url) => {
       urls.push(url)
       return new Response(JSON.stringify(url.includes('BaseVehiculo') ? BASE : [{ descripcionRubro: 'MATRICULA', valorRubro: 0 }]))
-    })
+    }, 15000, "")
     expect(urls[0]).toContain('numeroPlacaCampvCpn=PBA1234')
     expect(urls[1]).toContain('codigoVehiculo=123456')
     expect(r.base.descripcionMarca).toBe('CHEVROLET')
@@ -146,7 +146,7 @@ describe('placa: lectura tolerante de la respuesta', () => {
   })
   it('ignora ceros y vacíos (cilindraje 0 no se ofrece)', () => {
     const r = interpretarSri('PBA1234', { ...BASE, cilindraje: 0, colorVehiculo1: '' }, [])
-    expect(campo(r, 'motor')).toEqual([])
+    expect(campo(r, 'motor').map((h) => h.valor)).not.toContain('0 cc')
     expect(campo(r, 'color')).toEqual([])
   })
 })
@@ -170,5 +170,49 @@ describe('placa: servidor propio', () => {
     }, 15000, 'https://s.dev')
     expect(urls[1]).toContain('srienlinea.sri.gob.ec')
     expect(r.base.descripcionMarca).toBe('CHEVROLET')
+  })
+})
+
+// Forma real de la respuesta del SRI (2026-11): color, cilindraje y clase llegan en null; el traspaso viene como rubro.
+const REAL = { codigoVehiculo: 1, numeroPlaca: 'PBA1234', colorVehiculo1: null, colorVehiculo2: null, cilindraje: null, nombreClase: null,
+  descripcionMarca: 'CHEVROLET', descripcionModelo: 'CORSA 5P A/C 1.4L', anioAuto: 2002, descripcionPais: 'COLOMBIA', descripcionServicio: null,
+  ultimoAnioPagado: 2026, prohibidoEnajenar: null, estadoExoneracion: 'NO' } as unknown as BaseSri
+const TRASPASO = { codigoTipoDeuda: 'TRANSF_DOM', descripcionRubro: '1% TRANSFERENCIA DE DOMINIO', valorRubro: 14.75, anioHastaPago: 2026 }
+
+describe('placa: respuesta real del SRI', () => {
+  it('el 1 % de traspaso no es deuda: matrícula al día y valor del traspaso informado', () => {
+    const r = interpretarSri('PBA1234', REAL, [TRASPASO])
+    expect(campo(r, 'matricula')[0].opciones).toEqual(['Al día 2026'])
+    expect(r.avisos.join(' ')).not.toMatch(/pendiente/)
+    expect(r.hallazgos.find((h) => h.etiqueta.startsWith('Valor del traspaso'))?.valor).toBe('$14.75')
+  })
+  it('matrícula del año pendiente: aviso con años y total, sin «al día»', () => {
+    const r = interpretarSri('PBA1234', { ...REAL, ultimoAnioPagado: 2025 } as BaseSri, [TRASPASO,
+      { codigoTipoDeuda: 'MATRICULA', descripcionRubro: 'TASA SPPAT', valorRubro: 41.83, anioHastaPago: 2026 },
+      { codigoTipoDeuda: 'MATRICULA', descripcionRubro: 'TASAS ANT', valorRubro: 36, anioHastaPago: 2026 }])
+    expect(campo(r, 'matricula')).toEqual([])
+    expect(r.avisos.join(' ')).toMatch(/Matrícula 2026 pendiente en el SRI: \$77\.83 \(Tasa Sppat, Tasas Ant\)/)
+    expect(r.hallazgos.find((h) => h.etiqueta === 'Último año de matrícula pagado')?.valor).toBe('2025')
+  })
+  it('sin cilindraje: el motor sale del modelo registrado (1.4L); sin color ni clase no se inventa nada', () => {
+    const r = interpretarSri('PBA1234', REAL, [])
+    expect(campo(r, 'modelo')[0].opciones).toEqual(['Corsa'])
+    expect(campo(r, 'motor')[0].opciones).toEqual(['1.4'])
+    expect(campo(r, 'puertas')[0].opciones).toEqual(['5'])
+    expect(campo(r, 'color')).toEqual([])
+    expect(campo(r, 'carroceria')).toEqual([])
+  })
+  it('moto reconocida por la placa aunque el SRI no informe la clase', () => {
+    const r = interpretarSri('AB123C', { ...REAL, descripcionMarca: 'FACTORY BIKE', descripcionModelo: 'F-370', anioAuto: 2022 } as BaseSri, [])
+    expect(campo(r, 'carroceria')[0].opciones).toEqual(['Moto'])
+    expect(campo(r, 'marca')[0].opciones).toEqual(['Factory Bike'])
+  })
+  it('último pago de matrícula del historial (el más reciente) y placa registrada con 0', () => {
+    const r = interpretarSri('PJM343', REAL, [], [
+      { fechaDePago: '2020-12-03 12:54', tipoDeuda: 'PAGO DEL VALOR DE LA MATRÍCULA', monto: 70.1 },
+      { fechaDePago: '2024-04-08 02:31', tipoDeuda: 'PAGO DEL VALOR DE LA MATRÍCULA', monto: 69.85 },
+      { fechaDePago: '2025-01-01 10:00', tipoDeuda: 'PAGO DEL VALOR DE TRANSFERENCIA DE DOMINIO', monto: 12 }], 'PJM0343')
+    expect(r.hallazgos.find((h) => h.etiqueta === 'Último pago de matrícula')?.valor).toBe('2024-04-08 · $69.85')
+    expect(r.fuentes[0].nombre).toBe('SRI · placa PJM0343')
   })
 })

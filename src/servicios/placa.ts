@@ -31,7 +31,15 @@ export interface BaseSri {
   fechaRevision?: string
   observacion?: string
 }
-export interface RubroSri { descripcionRubro?: string; valorRubro?: number; anioDesdePago?: number; anioHastaPago?: number; nombreCortoBeneficiario?: string }
+export interface RubroSri { descripcionRubro?: string; valorRubro?: number; anioDesdePago?: number; anioHastaPago?: number; codigoTipoDeuda?: string; descripcionTipoDeuda?: string }
+/** Pago registrado en el SRI (consultaPagos): fecha, tipo y monto. */
+export interface PagoSri { fechaDePago?: string; tipoDeuda?: string; monto?: number }
+export interface ConsultaSri { base: BaseSri; rubros: RubroSri[]; pagos: PagoSri[]; registrada?: string }
+
+/** El 1 % de transferencia de dominio es el costo del traspaso, no una deuda de matrícula. */
+const esTraspaso = (r: RubroSri) => /TRANSF/i.test(`${r.codigoTipoDeuda ?? ''} ${r.descripcionRubro ?? ''}`)
+/** Moto por su placa (AB123C) aunque el SRI no informe la clase. */
+const placaDeMoto = (p: string) => /^[A-Z]{2}\d{3}[A-Z]$/.test(p)
 
 /** «pba-1234», «PBA 1234» → «PBA1234». */
 export function normalizarPlaca(p: string): string {
@@ -63,20 +71,20 @@ export class ErrorPlaca extends Error {
 
 /** Consulta directa al SRI desde el navegador. Lanza ErrorPlaca('sin-acceso') si el navegador no puede llegar. */
 /** Servidor de placas publicado (Cloudflare Worker de la carpeta /servidor). Vacío = aún no desplegado. */
-export const SERVIDOR_PLACAS = ''
+export const SERVIDOR_PLACAS = 'https://autopublicador-placas.erick-costa.workers.dev'
 
 /**
  * Consulta por placa: 1) servidor propio (si está configurado) → 2) SRI directo desde el navegador → 3) error
  * «sin-acceso» para que la interfaz ofrezca la consulta manual. Nunca se queda sin camino.
  */
-export async function consultarSri(placa: string, pedir: Pedir = fetch, ms = 15000, servidor = SERVIDOR_PLACAS): Promise<{ base: BaseSri; rubros: RubroSri[] }> {
+export async function consultarSri(placa: string, pedir: Pedir = fetch, ms = 15000, servidor = SERVIDOR_PLACAS): Promise<ConsultaSri> {
   if (servidor) {
     try {
       const s = await conTiempo(pedir, `${servidor.replace(/\/+$/, '')}/placa/${placa}`, Math.max(ms, 25000))
       if (s.status === 404) throw new ErrorPlaca('no-existe', `El SRI no tiene registrada la placa ${placa}.`)
       if (s.ok) {
-        const j = (await s.json()) as { base?: BaseSri; rubros?: RubroSri[] }
-        if (j.base) return { base: j.base, rubros: j.rubros ?? [] }
+        const j = (await s.json()) as { base?: BaseSri; rubros?: RubroSri[]; pagos?: PagoSri[]; registrada?: string }
+        if (j.base) return { base: j.base, rubros: j.rubros ?? [], pagos: j.pagos ?? [], registrada: j.registrada }
       }
     } catch (e) {
       if (e instanceof ErrorPlaca) throw e
@@ -100,7 +108,7 @@ export async function consultarSri(placa: string, pedir: Pedir = fetch, ms = 150
     const rr = await conTiempo(pedir, urlRubrosSri(base.codigoVehiculo), ms)
     if (rr.ok) rubros = ((await rr.json()) as RubroSri[]) ?? []
   } catch { /* sin rubros: se informa solo lo base */ }
-  return { base, rubros }
+  return { base, rubros, pagos: [] }
 }
 
 const titulo = (s?: string) => (s ?? '').toLowerCase().replace(/(^|\s|-)(\p{L})/gu, (_, a, b) => a + b.toUpperCase()).trim()
@@ -148,9 +156,9 @@ export function normalizarBase(crudo: Record<string, unknown>): BaseSri {
 }
 
 /** Convierte la respuesta del SRI en hallazgos aplicables (fuente: SRI) y avisos para el vendedor. */
-export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[]): Investigacion {
+export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[], pagos: PagoSri[] = [], registrada = placa): Investigacion {
   const base = normalizarBase(crudo as Record<string, unknown>)
-  const fuente = { nombre: `SRI · placa ${placa}`, url: urlBaseSri(placa) }
+  const fuente = { nombre: `SRI · placa ${registrada}`, url: urlBaseSri(registrada) }
   const h: Hallazgo[] = []
   const add = (campo: Hallazgo['campo'], etiqueta: string, valor: string | undefined, opcion?: string) => {
     if (valor) h.push({ campo, etiqueta, valor, opciones: opcion ? [opcion] : undefined, fuente })
@@ -166,9 +174,11 @@ export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[]
   const anio = String(base.anioAuto ?? '').match(/\d{4}/)?.[0]
   add('anio', 'Año', anio, anio)
   const cc = +String(base.cilindraje ?? '').replace(/\D/g, '')
-  const esMoto = /MOTO|CUADR|TRICI/i.test(base.nombreClase ?? '')
+  const esMoto = /MOTO|CUADR|TRICI/i.test(base.nombreClase ?? '') || placaDeMoto(registrada)
   // Autos: litros («1498 cc» → 1.5); motos: cilindraje en cc («150 cc»)
   if (cc > 0) add('motor', 'Cilindraje', `${cc} cc`, esMoto || cc < 600 ? `${cc} cc` : (Math.round(cc / 100) / 10).toFixed(1))
+  // El SRI a veces no informa el cilindraje pero el modelo registrado lo trae («CORSA 5P A/C 1.4L»)
+  else if (a.motor) add('motor', 'Motor (según el modelo registrado)', a.motor, a.motor)
   if (a.transmision) add('transmision', 'Transmisión', a.transmision, a.transmision)
   if (a.puertas) add('puertas', 'Puertas', a.puertas, a.puertas)
   if (a.traccion) add('traccion', 'Tracción', a.traccion, a.traccion)
@@ -177,7 +187,8 @@ export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[]
   if (color) add('color', 'Color', color + (base.colorVehiculo2 && base.colorVehiculo2 !== base.colorVehiculo1 ? ` / ${titulo(base.colorVehiculo2)}` : ''), color)
   add('procedencia', 'País de origen', titulo(base.descripcionPais), titulo(base.descripcionPais))
   const clase = (base.nombreClase ?? '').toUpperCase().trim()
-  add('carroceria', 'Clase', titulo(clase), CLASES[clase] || undefined)
+  if (clase) add('carroceria', 'Clase', titulo(clase), CLASES[clase] || undefined)
+  else if (esMoto) add('carroceria', 'Tipo (por el formato de placa de moto)', 'Moto', 'Moto')
   add(null, 'Servicio', titulo(base.descripcionServicio))
   add(null, 'Matriculado en', titulo(base.descripcionCanton))
   if (base.fechaRevision) add(null, 'Última revisión vehicular', String(base.fechaRevision).slice(0, 10))
@@ -186,10 +197,19 @@ export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[]
   const servicio = (base.descripcionServicio ?? '').toUpperCase()
   if (servicio && !/PARTICULAR/.test(servicio))
     avisos.push(`El SRI registra el servicio «${titulo(servicio)}» (no particular): menciónalo con claridad o revisa el cambio de servicio antes de publicar.`)
-  const deuda = rubros.reduce((s, r) => s + (+(r.valorRubro ?? 0) || 0), 0)
+  const valor = (r: RubroSri) => +(r.valorRubro ?? 0) || 0
+  const pendientes = rubros.filter((r) => valor(r) > 0 && !esTraspaso(r))
+  const traspaso = rubros.filter((r) => valor(r) > 0 && esTraspaso(r)).reduce((s, r) => s + valor(r), 0)
+  const deuda = pendientes.reduce((s, r) => s + valor(r), 0)
   const pagado = String(base.ultimoAnioPagado ?? '').match(/\d{4}/)?.[0]
+  if (pagado) add(null, 'Último año de matrícula pagado', pagado)
+  if (traspaso > 0) add(null, 'Valor del traspaso (1 % transferencia de dominio, lo calcula el SRI)', `$${traspaso.toFixed(2)}`)
+  const ultimo = [...pagos].filter((p) => /MATR/i.test(p.tipoDeuda ?? '') && p.fechaDePago)
+    .sort((x, y) => String(y.fechaDePago).localeCompare(String(x.fechaDePago)))[0]
+  if (ultimo) add(null, 'Último pago de matrícula', `${String(ultimo.fechaDePago).slice(0, 10)}${ultimo.monto ? ` · $${(+ultimo.monto).toFixed(2)}` : ''}`)
   if (deuda > 0) {
-    avisos.push(`El vehículo tiene valores pendientes en el SRI por $${deuda.toFixed(2)} (${rubros.filter((r) => r.valorRubro).map((r) => titulo(r.descripcionRubro)).join(', ')}). No se publicará «matrícula al día».`)
+    const anios = [...new Set(pendientes.map((r) => r.anioHastaPago).filter(Boolean))].join(', ')
+    avisos.push(`Matrícula${anios ? ` ${anios}` : ''} pendiente en el SRI: $${deuda.toFixed(2)} (${[...new Set(pendientes.map((r) => titulo(r.descripcionRubro)))].join(', ')}). No se publicará «matrícula al día».`)
   } else if (pagado) {
     add('matricula', 'Matrícula', `Último año pagado: ${pagado}, sin valores pendientes en el SRI`, `Al día ${pagado}`)
   }

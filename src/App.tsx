@@ -112,9 +112,9 @@ export default function App() {
   async function buscarPlaca(p: string, n: number) {
     setSri({ estado: 'buscando' })
     try {
-      const { base, rubros } = await consultarSri(p, fetch, 15000, ajustes.servidorPlacas || SERVIDOR_PLACAS)
+      const { base, rubros, pagos, registrada } = await consultarSri(p, fetch, 15000, ajustes.servidorPlacas || SERVIDOR_PLACAS)
       if (n !== ronda.current) return
-      const r = interpretarSri(p, base, rubros)
+      const r = interpretarSri(p, base, rubros, pagos, registrada || p)
       setSri({ estado: 'listo', resultado: r })
       completarCon(r, 'sri')
       registrarPlaca(p, r)
