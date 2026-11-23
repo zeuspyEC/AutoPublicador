@@ -1,9 +1,9 @@
-// Prueba contra Wikipedia real (necesita internet). Se ejecuta con: npm run test:integracion
+// Prueba contra Wikipedia real (necesita internet). Se ejecuta con: npm run test:integracion (vitest --mode integracion)
 import { describe, expect, it } from 'vitest'
 import { analizar } from '../dominio/analizador'
 import { investigarWikipedia } from './investigador'
 
-const activa = process.env.INTEGRACION === '1'
+const activa = import.meta.env.MODE === 'integracion'
 
 describe.runIf(activa)('investigación real en Wikipedia', () => {
   it('Peugeot 206 XT 1.6 2008: carrocería, tracción, transmisión y motores con fuente', async () => {

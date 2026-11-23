@@ -1,0 +1,12 @@
+{
+  "name": "AutoPublicador",
+  "short_name": "AutoPublicador",
+  "description": "Publicaciones de autos listas para Facebook Marketplace",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6fb",
+  "theme_color": "#1e3a8a",
+  "lang": "es",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
