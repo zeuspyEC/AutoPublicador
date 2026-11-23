@@ -195,7 +195,20 @@ describe('fusión: la placa (SRI) manda sobre el texto', () => {
     expect(f.vehiculo.matricula).toBe('Al día 2026')
     expect(f.vehiculo.precio).toBe('10549') // el precio sí viene del texto
     expect(f.origenes.modelo).toBe('sri')
-    expect(f.diferencias.map((d) => `${d.campo}:${d.anterior}→${d.oficial}`)).toEqual(['modelo:Corsa→Chevytaxi', 'anio:2002→2010'])
+    // Motor 1.4 y 5 puertas eran del Corsa del texto: no se atribuyen al Chevytaxi de la placa
+    expect(f.diferencias.map((d) => `${d.campo}:${d.anterior}→${d.oficial}`)).toEqual(['modelo:Corsa→Chevytaxi', 'anio:2002→2010', 'motor:1.4→', 'puertas:5→'])
+    expect(f.vehiculo.motor).toBe('')
+    expect(f.vehiculo.puertas).toBe('')
+    expect(f.origenes.motor).toBeUndefined()
+  })
+  it('si el modelo coincide, los detalles del texto se mantienen', async () => {
+    const { fusionar } = await import('./fusion')
+    const { interpretarSri } = await import('../servicios/placa')
+    const a = analizar('Chevrolet Corsa 5P 1.4L 2002 4500')
+    const f = fusionar(a.vehiculo, a.origenes, interpretarSri('PBA1234', { codigoVehiculo: 1, descripcionMarca: 'CHEVROLET', descripcionModelo: 'CORSA 5P A/C 1.4L', anioAuto: 2002 }, []), 'sri')
+    expect(f.diferencias).toEqual([])
+    expect(f.vehiculo.puertas).toBe('5')
+    expect(f.vehiculo.motor).toBe('1.4')
   })
   it('lo corregido a mano no se pisa', async () => {
     const { fusionar } = await import('./fusion')

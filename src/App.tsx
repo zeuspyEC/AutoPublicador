@@ -16,7 +16,7 @@ import { Resultados } from './componentes/Resultados'
 type Vista = 'crear' | 'historial' | 'ajustes'
 
 const IMPORTANTES: (keyof Vehiculo)[] = ['marca', 'modelo', 'anio', 'motor', 'transmision', 'precio']
-const NOMBRE_CAMPO: Partial<Record<keyof Vehiculo, string>> = { marca: 'marca', modelo: 'modelo', anio: 'año', motor: 'motor', transmision: 'transmisión', precio: 'precio', color: 'color', procedencia: 'procedencia', matricula: 'matrícula', carroceria: 'carrocería' }
+const NOMBRE_CAMPO: Partial<Record<keyof Vehiculo, string>> = { marca: 'marca', modelo: 'modelo', version: 'versión', puertas: 'puertas', anio: 'año', motor: 'motor', transmision: 'transmisión', precio: 'precio', color: 'color', procedencia: 'procedencia', matricula: 'matrícula', carroceria: 'carrocería' }
 
 const EJEMPLOS = [
   'Peugeot 206 XT 1.6 2008 procedencia argentina, techo corredizo, pantalla android, cámara de retro, aros. Matrícula 2025 cero multas. $4990 antes $5300, negociable, recibo carro o moto, a toda prueba',
@@ -277,8 +277,8 @@ export default function App() {
                   <h2><span className="numero">2</span> Datos del vehículo</h2>
                   {diferencias.length > 0 && (
                     <div className="aviso">
-                      🪪 La placa {placaConsultada} está registrada en el SRI con datos distintos a tu texto; se usaron los del SRI:
-                      <ul>{diferencias.map((d) => <li key={d.campo}>{NOMBRE_CAMPO[d.campo] ?? d.campo}: «{d.anterior}» → «{d.oficial}»</li>)}</ul>
+                      🚗 La placa {placaConsultada} está registrada en el SRI con datos distintos a tu texto; se usaron los del SRI:
+                      <ul>{diferencias.map((d) => <li key={d.campo}>{NOMBRE_CAMPO[d.campo] ?? d.campo}: «{d.anterior}» → {d.oficial ? `«${d.oficial}»` : 'se quitó (era del modelo de tu texto, no de esta placa)'}</li>)}</ul>
                       <button type="button" className="enlace" onClick={usarTexto}>Usar los datos de mi texto</button>
                     </div>
                   )}
