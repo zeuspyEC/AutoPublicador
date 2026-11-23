@@ -31,12 +31,17 @@ Fuera de alcance por ahora: fotos (no hay almacenamiento), respuestas a clientes
 | RF3 | **Extraer** del texto: marca, modelo, versión, año (también «del 98», «año 92»), motor, transmisión, combustible, kilometraje, precio y precio anterior, matrícula y cero multas, procedencia, puertas, tracción, color, equipamiento, estado, negociable, recibe cambio, a toda prueba. | ✅ |
 | RF4 | **Investigar** datos reales del modelo en fuentes públicas y **autocompletar** los campos vacíos cuando el dato es inequívoco; mostrar cada dato con su **fuente** y permitir aplicarlo con un toque. | ✅ Wikipedia · ✅ Google (opcional, con clave) |
 | RF5 | Detectar inconsistencias (año fuera del período de producción, motor que no existió para el modelo) y avisar. | ✅ |
-| RF6 | Generar **varias variantes de título** (≥ 6) y **de descripción** (≥ 5 plantillas) basadas en las publicaciones que funcionaron. | ✅ 8 títulos · 6 descripciones |
+| RF6 | Generar **varias variantes de título** y **de descripción** basadas en las publicaciones que funcionaron. | ✅ 8 títulos + 5 condicionales · 12 descripciones |
 | RF7 | El **teléfono nunca aparece limpio** (Facebook lo cambia por asteriscos): se separa con guiones, puntos, diagonales, mixto o emojis. | ✅ |
 | RF8 | Ubicación general fija: **Sector El Inca (Norte de Quito)**, sin dirección exacta (para que el cliente escriba). Editable en Ajustes. | ✅ |
 | RF9 | Todo **editable**: campos del vehículo, textos generados, beneficios ofrecidos. | ✅ |
 | RF10 | **Copiar** con un toque (título, descripción, precio). | ✅ |
 | RF11 | **Historial** de publicaciones guardadas para reutilizarlas. | ✅ |
+| RF12 | **Consulta por placa** (SRI): marca, modelo (con versión, motor, puertas y transmisión del modelo registrado), año, cilindraje, color, país, clase, matrícula y valores pendientes. Sin datos del propietario. Si el navegador no puede consultar el SRI, respaldo: abrir la consulta y **pegar** el resultado (JSON o texto). | ✅ |
+| RF13 | **Pegar lo copiado de Google** (sin API): se extraen motor, transmisión, tracción, potencia, torque, consumo, velocidades y pasajeros. | ✅ |
+| RF14 | **Corrección de errores de tipeo** del modelo («Alegro» → «Allegro») y nombres comerciales de Ecuador → artículo internacional (Allegro → Mazda 323). | ✅ |
+| RF15 | **Diagnóstico de la clave de Google** en Ajustes (modelos permitidos, prueba con y sin búsqueda, motivo exacto de cada error). | ✅ |
+| RF16 | **Comentarios y respuestas rápidas** para la publicación (disponible, cita, precio, cambio, papeles, horario, subir). | ✅ |
 
 ### No funcionales
 - Uso principal desde el **celular** (diseño móvil, botones ≥ 44 px, modo oscuro).
@@ -135,14 +140,18 @@ sequenceDiagram
 |---|---|---|
 | Wikipedia (es) | Fabricante, período de producción por país, tipo, carrocerías, tracción, transmisiones, peso, largo, resumen | Gratis, sin clave. Cabecera `Api-User-Agent` (Wikipedia responde 429 sin identificación) |
 | Wikipedia (en) | Lista de motores (cilindradas) y combustible (gasolina/diésel) | Igual |
-| Google vía Gemini (`gemini-2.5-flash`, herramienta `google_search`) | Datos de la versión y año exactos en Ecuador: motor, potencia, transmisión y velocidades, tracción, carrocería, puertas, pasajeros, equipamiento de serie, datos de interés; con las páginas consultadas | Clave gratuita de Google AI Studio que el vendedor pega en Ajustes (se guarda solo en su navegador) |
+| SRI por placa (`BaseVehiculo/obtenerPorNumeroPlacaOPorNumeroCampvOPorNumeroCpn` + `ConsultaRubros/obtenerPorCodigoVehiculo`, los mismos de ECPlacas) | Datos oficiales del vehículo y su matrícula | Gratis. Si el navegador no puede consultarlo (CORS o servicio caído), el vendedor abre el enlace de datos y pega el resultado |
+| Google vía Gemini (modelo elegido de la lista real de la clave; herramienta `google_search`) | Datos de la versión y año exactos en Ecuador con las páginas consultadas. Si el plan no permite la búsqueda (error 429, cuota 0 en proyectos gratuitos), usa el modelo **sin búsqueda** y lo marca «verificar» | Clave de Google AI Studio en Ajustes (solo en el navegador). Botón «Probar clave» |
+| Texto copiado de Google | Lo que el vendedor copia de la búsqueda (sin API ni clave) | Gratis |
+
+**Fuentes descartadas:** el servicio de la ANT en axiscloud responde «ALLOW_DOMAIN NO AUTORIZADO» a otros sitios; saltarse ese bloqueo sería suplantar a otro sitio, por eso no se usa. Leer los resultados de Google directamente desde la app no es posible (Google y el navegador lo bloquean); la alternativa es «pegar lo copiado». Datos del propietario: nunca se usan.
 
 La lectura de fichas (`wikitexto.ts`) respeta el anidamiento de `{{…}}` y `[[…]]`, resuelve enlaces antes que
 plantillas, convierte `{{ubl|…}}`, `{{convert|…}}`/`{{convertir|…}}` y `&nbsp;` (casos reales que fallaban).
 
 ## 8. Pruebas
 
-- `npm test` — 29 pruebas unitarias (analizador con los casos de las publicaciones reales, teléfono, plantillas,
+- `npm test` — 51 pruebas unitarias (analizador con los casos de las publicaciones reales, teléfono, plantillas,
   fichas de Wikipedia con texto real, formato de respuesta de Gemini).
 - `npm run test:integracion` — 3 pruebas contra Wikipedia real (Peugeot 206, año fuera de producción, Chevrolet
   Vitara → Suzuki Vitara).
@@ -186,4 +195,5 @@ de terceros, `.env` ni claves; mantener este archivo al día (sección 11).
 | 2026-11-23 | Investigación con fuente: Wikipedia ES/EN (lectura robusta de fichas) y Google vía Gemini. Se corrigieron: kilometraje que absorbía el «4» de «4x4», año confundido con el modelo «Peugeot 2008», palabras comunes tomadas como modelos, `&nbsp;` en motores, error 429 de Wikipedia sin `Api-User-Agent`. |
 | 2026-11-23 | Interfaz móvil en 4 pasos, ajustes (perfil, ubicación, beneficios, clave de Google), historial. Prueba E2E en Chrome. Mejoras de redacción (versión «XT», «pantalla Android», horario, motor sin repetir). |
 | 2026-11-23 | Despliegue automático en GitHub Pages con pruebas previas. Verificado en el sitio publicado (Chrome a 390 px). |
+| 2026-11-23 | v0.2.0 — Placa (SRI) con respaldo «pegar»; Google: descubre modelos, explica el 429 real del usuario (cuota agotada con búsqueda) y usa respaldo sin búsqueda marcado; diagnóstico de la clave; Wikipedia con nombres de Ecuador (Allegro → Mazda 323) y corrección de tipeo; abreviaturas TM/TA/AC; 12 descripciones, títulos condicionales y comentarios. 51 pruebas + 4 contra Wikipedia real; prueba E2E con SRI y Gemini simulados en su formato real. El SRI no responde desde la red de desarrollo: probar la consulta automática desde el celular. |
 | 2026-11-23 | v0.1.1 — Prueba en el sitio publicado con otro vehículo: precio escrito sin símbolo («… cero multas 4990») no se detectaba; títulos largos quedaban cortados en su cuadro. Ambos corregidos (29 pruebas). |
