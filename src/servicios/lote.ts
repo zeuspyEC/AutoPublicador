@@ -5,7 +5,7 @@ import { fusionar } from '../dominio/fusion'
 import { descripciones, titulos } from '../dominio/plantillas'
 import { VEHICULO_VACIO, type Ajustes, type Origenes, type Perfil, type Vehiculo } from '../dominio/tipos'
 import type { PlacaConsultada, Publicacion } from './almacen'
-import { investigarWikipedia, type Investigacion } from './investigador'
+import { investigarGoogle, investigarWikipedia, type Investigacion } from './investigador'
 import { consultarSri, interpretarSri, normalizarPlaca, placaValida, resumenDePlaca, SERVIDOR_PLACAS } from './placa'
 
 type Pedir = (url: string, init?: RequestInit) => Promise<Response>
@@ -33,10 +33,13 @@ export async function publicacionDePlaca(placa: string, perfil: Perfil, ajustes:
   try {
     const c = await consultarSri(placa, pedir, 15000, ajustes.servidorPlacas || SERVIDOR_PLACAS)
     const sri = interpretarSri(placa, c.base, c.rubros, c.pagos, c.registrada || placa,
-      { componentes: c.componentes, detallesPago: c.detallesPago, resumenPagos: c.resumenPagos })
+      { componentes: c.componentes, detallesPago: c.detallesPago, resumenPagos: c.resumenPagos, impuestoAmbiental: c.impuestoAmbiental })
     let f = fusionar(VEHICULO_VACIO, {}, sri, 'sri')
     const wikipedia = f.vehiculo.modelo ? await investigarWikipedia(f.vehiculo, pedir).catch(() => null) : null
     if (wikipedia) f = fusionar(f.vehiculo, f.origenes, wikipedia, 'wikipedia')
+    // Igual que la consulta individual: con clave de Google AI Studio, Gemini completa lo que falte (marcado «verificar»)
+    const google = ajustes.claveGemini && f.vehiculo.modelo ? await investigarGoogle(f.vehiculo, ajustes.claveGemini).catch(() => null) : null
+    if (google) f = fusionar(f.vehiculo, f.origenes, google, 'google')
     const ctx = { v: f.vehiculo, perfil, beneficios: ajustes.beneficios, ubicacion: ajustes.ubicacion }
     const fecha = new Date().toISOString()
     const publicacion: Publicacion = {

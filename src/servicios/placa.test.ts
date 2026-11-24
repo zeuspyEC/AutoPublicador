@@ -69,7 +69,7 @@ describe('placa: lo que el vendedor pega desde el SRI', () => {
     expect(campo(r, 'modelo')[0].opciones).toEqual(['Rio'])
     expect(campo(r, 'anio')[0].opciones).toEqual(['2016'])
     expect(campo(r, 'motor')[0].opciones).toEqual(['1.4'])
-    expect(campo(r, 'procedencia')[0].opciones).toEqual(['Corea Del Sur'])
+    expect(campo(r, 'procedencia')[0].opciones).toEqual(['Corea del Sur'])
   })
   it('texto que no es del SRI → null', () => {
     expect(interpretarPegado('PBA1234', 'hola mundo')).toBeNull()
@@ -168,7 +168,9 @@ describe('placa: servidor propio', () => {
       if (url.startsWith('https://s.dev')) throw new TypeError('Failed to fetch')
       return new Response(JSON.stringify(url.includes('BaseVehiculo') ? BASE : []))
     }, 15000, 'https://s.dev')
-    expect(urls[1]).toContain('srienlinea.sri.gob.ec')
+    // Dos intentos con el servidor y luego directo
+    expect(urls.slice(0, 2)).toEqual(['https://s.dev/placa/PBA1234', 'https://s.dev/placa/PBA1234'])
+    expect(urls[2]).toContain('srienlinea.sri.gob.ec')
     expect(r.base.descripcionMarca).toBe('CHEVROLET')
   })
 })
@@ -291,5 +293,33 @@ describe('placa: carrocería escrita en el modelo registrado', () => {
     const r = interpretarSri('PBA1234', { codigoVehiculo: 1, descripcionMarca: 'MAZDA', descripcionModelo: 'ALLEGRO SEDAN 1.6', anioAuto: 2004 }, [])
     expect(r.hallazgos.find((h) => h.campo === 'carroceria')?.opciones).toEqual(['Sedán'])
     expect(r.hallazgos.find((h) => h.campo === 'version')).toBeUndefined()
+  })
+})
+
+describe('placa: cilindraje desde el impuesto ambiental pagado (forma real del servidor)', () => {
+  const IACV = [{ anio: 2014, componente: 'Impuesto', valor: 81 }, { anio: 2015, componente: 'Impuesto', valor: 85.05 }, { anio: 2013, componente: 'Interes', valor: 3.31 }]
+  it('Jeep Patriot 2010 sin cilindraje en el SRI → motor 2.4 (2400 cc)', () => {
+    const r = interpretarSri('PBA1234', { codigoVehiculo: 1, descripcionMarca: 'JEEP', descripcionModelo: 'PATRIOT', anioAuto: 2010 }, [], [], 'PBA1234', { impuestoAmbiental: IACV })
+    const m = r.hallazgos.find((h) => h.campo === 'motor')
+    expect(m?.opciones).toEqual(['2.4'])
+    expect(m?.etiqueta).toMatch(/impuesto ambiental/)
+  })
+  it('si el modelo registrado ya trae el motor y coincide, se confirma; si no coincide, se avisa', () => {
+    const ok = interpretarSri('PBA1234', { codigoVehiculo: 1, descripcionMarca: 'CHEVROLET', descripcionModelo: 'CORSA EVOLUTION 4P 1.8 STD', anioAuto: 2004 }, [], [], 'PBA1234',
+      { impuestoAmbiental: [{ anio: 2013, componente: 'Impuesto', valor: 25.2 }] })
+    expect(ok.hallazgos.find((h) => h.etiqueta === 'Confirmado por el impuesto ambiental')?.valor).toBe('1800 cc')
+    const mal = interpretarSri('PBA1234', { codigoVehiculo: 1, descripcionMarca: 'CHEVROLET', descripcionModelo: 'CORSA 1.4', anioAuto: 2004 }, [], [], 'PBA1234',
+      { impuestoAmbiental: [{ anio: 2013, componente: 'Impuesto', valor: 25.2 }] })
+    expect(mal.avisos.join(' ')).toMatch(/dice motor 1\.4 pero el impuesto ambiental pagado corresponde a 1800 cc/)
+  })
+})
+
+describe('placa: textos sin afirmaciones falsas', () => {
+  it('con matrícula pendiente la descripción no dice «documentación en regla»; país con minúsculas correctas', () => {
+    const a = analizar('Jeep Patriot 2.4 2010')
+    const r = interpretarSri('PBA1234', { codigoVehiculo: 1, descripcionMarca: 'JEEP', descripcionModelo: 'PATRIOT', anioAuto: 2010, descripcionPais: 'ESTADOS UNIDOS DE AMÉRICA', ultimoAnioPagado: 2024 }, [{ descripcionRubro: 'TASAS ANT', valorRubro: 97 }])
+    expect(r.hallazgos.find((h) => h.campo === 'procedencia')?.opciones).toEqual(['Estados Unidos de América'])
+    const ctx = { v: { ...a.vehiculo, matricula: '' }, perfil: { nombre: 'X', telefono: '0987654321', estiloTelefono: 'puntos', horario: '' } as never, beneficios: BENEFICIOS_PREDETERMINADOS }
+    expect(descripciones(ctx).map((d) => d.texto).join('\n')).not.toMatch(/documentación en regla|papeles en regla/)
   })
 })

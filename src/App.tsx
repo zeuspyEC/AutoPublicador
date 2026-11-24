@@ -112,9 +112,9 @@ export default function App() {
   async function buscarPlaca(p: string, n: number) {
     setSri({ estado: 'buscando' })
     try {
-      const { base, rubros, pagos, registrada, componentes, detallesPago, resumenPagos } = await consultarSri(p, fetch, 15000, ajustes.servidorPlacas || SERVIDOR_PLACAS)
+      const { base, rubros, pagos, registrada, componentes, detallesPago, resumenPagos, impuestoAmbiental } = await consultarSri(p, fetch, 15000, ajustes.servidorPlacas || SERVIDOR_PLACAS)
       if (n !== ronda.current) return
-      const r = interpretarSri(p, base, rubros, pagos, registrada || p, { componentes, detallesPago, resumenPagos })
+      const r = interpretarSri(p, base, rubros, pagos, registrada || p, { componentes, detallesPago, resumenPagos, impuestoAmbiental })
       setSri({ estado: 'listo', resultado: r })
       completarCon(r, 'sri')
       registrarPlaca(p, r)
@@ -256,7 +256,7 @@ export default function App() {
               <textarea className="entrada" rows={4} value={texto} onChange={(e) => setTexto(e.target.value)}
                 placeholder="Ej.: Kia Rio 1.4 2016 manual, 85.000 km, aire, pantalla, matrícula 2025, $11.500 negociable" />
               <label className="campo placa">
-                <span>Placa (opcional): completa marca, modelo, año, cilindraje, color y matrícula desde el SRI</span>
+                <span>Placa (opcional): trae del SRI marca, modelo, año, motor, procedencia, matrícula y valores pendientes</span>
                 <input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())} placeholder="PBA1234" maxLength={9} autoCapitalize="characters" autoComplete="off" />
                 {!placaOk && <small className="error">Placa no válida: 3 letras y 3 o 4 números (autos) o 2 letras, 3 números y 1 letra (motos).</small>}
               </label>

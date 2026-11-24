@@ -4,6 +4,7 @@
 // el vendedor abre la consulta en el SRI y pega el resultado: se interpreta igual (JSON o texto).
 import { analizar } from '../dominio/analizador'
 import { ALIAS_MARCA } from '../dominio/catalogo'
+import { cilindrajeDesdeIacv, litros, type LineaIacv } from '../dominio/impuestoAmbiental'
 import type { Hallazgo, Investigacion } from './investigador'
 
 type Pedir = (url: string, init?: RequestInit) => Promise<Response>
@@ -43,7 +44,7 @@ export interface ComponentesSri { codigoRubro?: number; componentes: { codigoCom
 export interface DetallePagoSri { fechaDePago?: string; detalle: { descripcionRubro?: string; descripcionComponente?: string; anio?: number; valor?: number }[] }
 /** Resumen de TODO el historial de pagos que calcula el servidor. */
 export interface ResumenPagosSri { totalPagos?: number; traspasos?: number; ultimoTraspaso?: string | null; primerPago?: string | null; ultimoPago?: string | null }
-export interface ExtraSri { componentes?: ComponentesSri[]; detallesPago?: DetallePagoSri[]; resumenPagos?: ResumenPagosSri }
+export interface ExtraSri { componentes?: ComponentesSri[]; detallesPago?: DetallePagoSri[]; resumenPagos?: ResumenPagosSri; impuestoAmbiental?: LineaIacv[] }
 export interface ConsultaSri extends ExtraSri { base: BaseSri; rubros: RubroSri[]; pagos: PagoSri[]; registrada?: string }
 
 /** El 1 % de transferencia de dominio es el costo del traspaso, no una deuda de matrícula. */
@@ -88,17 +89,18 @@ export const SERVIDOR_PLACAS = 'https://autopublicador-placas.erick-costa.worker
  * «sin-acceso» para que la interfaz ofrezca la consulta manual. Nunca se queda sin camino.
  */
 export async function consultarSri(placa: string, pedir: Pedir = fetch, ms = 15000, servidor = SERVIDOR_PLACAS): Promise<ConsultaSri> {
-  if (servidor) {
+  // Dos intentos con el servidor (la primera consulta de una placa reúne varios servicios del SRI y puede tardar)
+  for (let intento = 0; servidor && intento < 2; intento++) {
     try {
-      const s = await conTiempo(pedir, `${servidor.replace(/\/+$/, '')}/placa/${placa}`, Math.max(ms, 25000))
+      const s = await conTiempo(pedir, `${servidor.replace(/\/+$/, '')}/placa/${placa}`, Math.max(ms, 45000))
       if (s.status === 404) throw new ErrorPlaca('no-existe', `El SRI no tiene registrada la placa ${placa}.`)
       if (s.ok) {
         const j = (await s.json()) as Partial<ConsultaSri>
-        if (j.base) return { base: j.base, rubros: j.rubros ?? [], pagos: j.pagos ?? [], registrada: j.registrada, componentes: j.componentes ?? [], detallesPago: j.detallesPago ?? [], resumenPagos: j.resumenPagos }
+        if (j.base) return { base: j.base, rubros: j.rubros ?? [], pagos: j.pagos ?? [], registrada: j.registrada, componentes: j.componentes ?? [], detallesPago: j.detallesPago ?? [], resumenPagos: j.resumenPagos, impuestoAmbiental: j.impuestoAmbiental ?? [] }
       }
     } catch (e) {
       if (e instanceof ErrorPlaca) throw e
-      // servidor caído: se intenta directo
+      // servidor sin respuesta: se reintenta una vez y luego se intenta directo
     }
   }
   let r: Response
@@ -122,6 +124,7 @@ export async function consultarSri(placa: string, pedir: Pedir = fetch, ms = 150
 }
 
 const titulo = (s?: string) => (s ?? '').toLowerCase().replace(/(^|\s|-)(\p{L})/gu, (_, a, b) => a + b.toUpperCase()).trim()
+    .replace(/(?<=\s)(De|Del|La|Las|Los|Y|E)(?=\s)/g, (m) => m.toLowerCase())
 const CLASES: Record<string, string> = { JEEP: 'SUV', CAMIONETA: 'Camioneta', 'VEHICULO UTILITARIO': 'SUV', FURGONETA: 'Furgoneta', AUTOMOVIL: '', AUTOMÓVIL: '',
   MOTOCICLETA: 'Moto', MOTO: 'Moto', CUADRON: 'Cuadrón', 'CUADRÓN': 'Cuadrón', TRICIMOTO: 'Tricimoto' }
 
@@ -183,6 +186,7 @@ export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[]
   const base = normalizarBase(crudo as Record<string, unknown>)
   const fuente = { nombre: `SRI · placa ${registrada}`, url: urlBaseSri(registrada) }
   const h: Hallazgo[] = []
+  const avisos: string[] = []
   const add = (campo: Hallazgo['campo'], etiqueta: string, valor: string | undefined, opcion?: string) => {
     if (valor) h.push({ campo, etiqueta, valor, opciones: opcion ? [opcion] : undefined, fuente })
   }
@@ -200,8 +204,17 @@ export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[]
   const esMoto = /MOTO|CUADR|TRICI/i.test(base.nombreClase ?? '') || placaDeMoto(registrada)
   // Autos: litros («1498 cc» → 1.5); motos: cilindraje en cc («150 cc»)
   if (cc > 0) add('motor', 'Cilindraje', `${cc} cc`, esMoto || cc < 600 ? `${cc} cc` : (Math.round(cc / 100) / 10).toFixed(1))
-  // El SRI a veces no informa el cilindraje pero el modelo registrado lo trae («CORSA 5P A/C 1.4L»)
-  else if (a.motor) add('motor', 'Motor (según el modelo registrado)', a.motor, a.motor)
+  else {
+    // Cilindraje despejado del impuesto ambiental que el SRI cobró con ese cilindraje (2012-2019)
+    const iacv = cilindrajeDesdeIacv(extra.impuestoAmbiental ?? [], +(anio ?? 0))
+    const etiqueta = iacv && `Cilindraje: ${iacv.cc} cc (calculado del impuesto ambiental pagado al SRI, ${iacv.anios} ${iacv.anios === 1 ? 'año' : 'años'})`
+    // El modelo registrado también puede traerlo («CORSA 5P A/C 1.4L»): si ambos coinciden, mejor
+    if (a.motor) {
+      add('motor', 'Motor (según el modelo registrado)', a.motor, a.motor)
+      if (iacv && litros(iacv.cc) !== a.motor) avisos.push(`El modelo registrado dice motor ${a.motor} pero el impuesto ambiental pagado corresponde a ${iacv.cc} cc (${litros(iacv.cc)}). Verifícalo.`)
+      else if (iacv) add(null, 'Confirmado por el impuesto ambiental', `${iacv.cc} cc`)
+    } else if (iacv) add('motor', etiqueta as string, `${iacv.cc} cc`, esMoto ? `${iacv.cc} cc` : litros(iacv.cc))
+  }
   if (a.transmision) add('transmision', 'Transmisión', a.transmision, a.transmision)
   if (a.puertas) add('puertas', 'Puertas', a.puertas, a.puertas)
   if (a.traccion) add('traccion', 'Tracción', a.traccion, a.traccion)
@@ -219,7 +232,6 @@ export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[]
   add(null, 'Matriculado en', titulo(base.descripcionCanton))
   if (base.fechaRevision) add(null, 'Última revisión vehicular', String(base.fechaRevision).slice(0, 10))
 
-  const avisos: string[] = []
   const servicio = (base.descripcionServicio ?? '').toUpperCase()
   if (servicio && !/PARTICULAR/.test(servicio))
     avisos.push(`El SRI registra el servicio «${titulo(servicio)}» (no particular): menciónalo con claridad o revisa el cambio de servicio antes de publicar.`)
