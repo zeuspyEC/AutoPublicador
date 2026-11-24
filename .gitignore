@@ -31,3 +31,6 @@ referencias/capturas/
 # Cloudflare Wrangler
 servidor/.wrangler/
 .wrangler/
+
+# Resultados de las pruebas de punta a punta (capturas e informes locales)
+pruebas/e2e/salida/
