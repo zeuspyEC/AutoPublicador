@@ -121,7 +121,7 @@ export function descripciones(c: Contexto): Variante[] {
   const equipo = v.equipamiento.slice(0, 2).map(minusculaInicial) // «pantalla Android», no «pantalla android»
 
   const completa = lineas(
-    `¡Se vende o se cambia! ${capitalizar(vehiculo)}${v.anio ? ` ${v.anio}` : ''} en excelente estado${equipo.length ? `, con ${equipo.join(' y ')}` : ''}. Ideal para ${idealPara(v)}, con toda la documentación en regla.`,
+    `¡Se vende o se cambia! ${capitalizar(vehiculo)}${v.anio ? ` ${v.anio}` : ''} en excelente estado${equipo.length ? `, con ${equipo.join(' y ')}` : ''}. Ideal para ${idealPara(v)}${v.matricula ? ', con toda la documentación en regla' : ''}.`,
     '',
     '💎 DETALLES DEL VEHÍCULO:',
     ...detalles(v),
@@ -322,7 +322,7 @@ export function comentarios(c: Contexto): Variante[] {
     { id: 'cita', nombre: 'Agendar cita', texto: `Hola 👋 Sí, el ${vehiculo} está disponible. ¿Te gustaría agendar una cita para verlo? Estamos en ${ubic(c)} 📍. Pide la cita a nombre de ${nombre}.` },
     { id: 'precio', nombre: 'Sobre el precio', texto: `💬 El precio${v.precio ? ` de $${miles(v.precio)}` : ''} es conversable en el patio 🤝. Escríbeme al 📲 ${telefono} y lo vemos.` },
     { id: 'cambio', nombre: 'Recibo cambio', texto: `🔄 Sí recibimos tu auto o moto como parte de pago. Mándame fotos y el año de tu vehículo al 📲 ${telefono}.` },
-    { id: 'papeles', nombre: 'Papeles y mecánico', texto: `📄 ${v.matricula ? `Tiene la matrícula ${v.matricula.toLowerCase()}` : 'Tiene los papeles en regla'}${v.ceroMultas ? ' y cero multas' : ''}. Puedes traer a tu mecánico de confianza 🔧.` },
+    { id: 'papeles', nombre: 'Papeles y mecánico', texto: `📄 ${v.matricula ? `Tiene la matrícula ${v.matricula.toLowerCase()}${v.ceroMultas ? ' y cero multas' : ''}. ` : ''}Puedes traer a tu mecánico de confianza 🔧.` },
     { id: 'horario', nombre: 'Horario y ubicación', texto: horario ? `⏰ Atendemos ${horario.charAt(0).toLowerCase() + horario.slice(1)}. Te espero en ${ubic(c)} 📍 — ${nombre}` : `📍 Te espero en ${ubic(c)}. Escríbeme para coordinar la visita 📲 ${telefono} — ${nombre}` },
     { id: 'subir', nombre: 'Para subir la publicación', texto: `⬆️ ¡Disponible! ${limpiar(`${vehiculo} ${v.anio}`)} 💯 Escríbeme 📲 ${telefono}` },
   ]
