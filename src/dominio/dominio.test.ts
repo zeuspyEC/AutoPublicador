@@ -237,3 +237,27 @@ describe('equivalencias de Wikipedia con la marca que registra el SRI', () => {
     expect(ARTICULO_EQUIVALENTE['chevrolet chevytaxi']).toBe('Chevrolet Aveo')
   })
 })
+
+describe('deuda del SRI: el vendedor decide si se menciona, y va junto al precio', () => {
+  const perfil = { nombre: 'Vendedor', telefono: '0987654321', estiloTelefono: 'puntos', horario: '' } as never
+  const base = { ...analizar('Jeep Patriot 2.4 2010 9500').vehiculo, deuda: '328.18' }
+  const textos = async (v: typeof base) => {
+    const { descripciones, titulos, comentarios } = await import('./plantillas')
+    const ctx = { v, perfil, beneficios: [] }
+    return [...titulos(ctx), ...descripciones(ctx), ...comentarios(ctx)].map((x) => x.texto).join('\n')
+  }
+  it('sin marcar «mencionar», la deuda no aparece en ningún texto', async () => {
+    expect(await textos({ ...base, mostrarDeuda: false })).not.toMatch(/pendientes|328/)
+  })
+  it('marcada, va en la línea del precio como motivo de «negociable», con formato de Ecuador', async () => {
+    const t = await textos({ ...base, mostrarDeuda: true })
+    expect(t).toMatch(/Precio: \$9\.500 \(negociable · valores pendientes de matrícula: \$328,18\)/)
+    expect(t).toMatch(/considerando los \$328,18 pendientes de matrícula/)
+    // Nunca fuera de la línea del precio (ni en los títulos)
+    const lineas = t.split('\n').filter((l) => l.includes('pendientes de matrícula'))
+    expect(lineas.every((l) => /\$9\.500|precio/i.test(l))).toBe(true)
+  })
+  it('sin deuda registrada, la casilla no tiene efecto', async () => {
+    expect(await textos({ ...base, deuda: '', mostrarDeuda: true })).not.toMatch(/pendientes de matrícula/)
+  })
+})

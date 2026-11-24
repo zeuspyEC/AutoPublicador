@@ -26,6 +26,15 @@ const lineas = (...ls: (string | false | undefined | null)[]) => ls.filter((l) =
 const bloque = (...ls: (string | false | undefined | null)[]) => ls.filter(Boolean) as string[]
 const mayus = (s: string) => s.toLocaleUpperCase('es')
 const miles = (d: string) => (d ? (+d).toLocaleString('es-EC').replace(/,/g, '.') : '')
+/** «83.78» → «83,78»; «1707.17» → «1.707,17» (formato de Ecuador). */
+const dinero = (d: string) => { const [e, c = '00'] = (+d).toFixed(2).split('.'); return `${e.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${c}` }
+/** El vendedor eligió mencionar los valores pendientes del SRI. */
+export const conDeuda = (v: Vehiculo) => !!v.mostrarDeuda && +(v.deuda || 0) > 0
+/** Sufijo del precio: con la deuda visible, el precio es negociable por ella; si no, el «negociable» de siempre. */
+export function sufijoPrecio(v: Vehiculo, normal: string): string {
+  if (conDeuda(v)) return ` (negociable · valores pendientes de matrícula: $${dinero(v.deuda)})`
+  return v.negociable ? normal : ''
+}
 const minusculaInicial = (s: string) => (/^[A-ZÁÉÍÓÚÑ]{2}/.test(s) ? s : s.charAt(0).toLocaleLowerCase('es') + s.slice(1))
 const capitalizar = (s: string) => s.replace(/(^|\s)(\p{L})/gu, (_, a, b) => a + b.toLocaleUpperCase('es'))
 
@@ -107,7 +116,7 @@ function detalles(v: Vehiculo, prefijo = '✅'): string[] {
 function precioLinea(v: Vehiculo): string | false {
   if (!v.precio) return false
   const antes = v.precioAnterior && +v.precioAnterior > +v.precio ? ` (antes $${miles(v.precioAnterior)})` : ''
-  return `💲 Precio: $${miles(v.precio)}${antes}${v.negociable ? ' — negociable' : ''}`
+  return `💲 Precio: $${miles(v.precio)}${antes}${sufijoPrecio(v, ' — negociable')}`
 }
 
 export function descripciones(c: Contexto): Variante[] {
@@ -212,7 +221,7 @@ export function descripciones(c: Contexto): Variante[] {
   const oportunidad = lineas(
     '🔥 ¡OPORTUNIDAD ÚNICA! 🔥',
     `${mayus(limpiar(`${vehiculo} ${motorL(v)} ${v.anio}`))}${v.matricula ? ' — PAPELES AL DÍA' : ''}`,
-    v.precio && `💲 SOLO $${miles(v.precio)}${v.negociable ? ' (negociable)' : ''}`,
+    v.precio && `💲 SOLO $${miles(v.precio)}${sufijoPrecio(v, ' (negociable)')}`,
     '',
     ...resumenCorto,
     '',
@@ -240,7 +249,7 @@ export function descripciones(c: Contexto): Variante[] {
     v.equipamiento.length > 0 && `⭐ Equipamiento: ${v.equipamiento.join(', ')}`,
     v.notas && `📝 Estado: ${v.notas}`,
     '',
-    v.precio && `💰 Precio: $${miles(v.precio)}${v.negociable ? ' · negociable' : ''}`,
+    v.precio && `💰 Precio: $${miles(v.precio)}${sufijoPrecio(v, ' · negociable')}`,
     `📍 ${ubic(c)}`,
     `📲 ${nombre}: ${telefono}`,
   )
@@ -274,7 +283,7 @@ export function descripciones(c: Contexto): Variante[] {
 
   const minima = lineas(
     limpiar([capitalizar(vehiculo), v.anio, motorL(v), v.transmision, v.matricula].filter(Boolean).join(' · ')),
-    v.precio && `💲 $${miles(v.precio)}${v.negociable ? ' negociable' : ''}`,
+    v.precio && `💲 $${miles(v.precio)}${sufijoPrecio(v, ' negociable')}`,
     `📍 ${ubic(c)}`,
     `📲 ${telefono} · ${nombre}`,
   )
@@ -320,7 +329,7 @@ export function comentarios(c: Contexto): Variante[] {
   const lista: (Variante | false)[] = [
     { id: 'disponible', nombre: 'Sigue disponible', texto: `✅ ¡Sigue disponible! Escríbeme al 📲 ${telefono} y te envío más fotos y detalles del ${vehiculo}.` },
     { id: 'cita', nombre: 'Agendar cita', texto: `Hola 👋 Sí, el ${vehiculo} está disponible. ¿Te gustaría agendar una cita para verlo? Estamos en ${ubic(c)} 📍. Pide la cita a nombre de ${nombre}.` },
-    { id: 'precio', nombre: 'Sobre el precio', texto: `💬 El precio${v.precio ? ` de $${miles(v.precio)}` : ''} es conversable en el patio 🤝. Escríbeme al 📲 ${telefono} y lo vemos.` },
+    { id: 'precio', nombre: 'Sobre el precio', texto: `💬 El precio${v.precio ? ` de $${miles(v.precio)}` : ''} es conversable en el patio 🤝${conDeuda(v) ? `, considerando los $${dinero(v.deuda)} pendientes de matrícula` : ''}. Escríbeme al 📲 ${telefono} y lo vemos.` },
     { id: 'cambio', nombre: 'Recibo cambio', texto: `🔄 Sí recibimos tu auto o moto como parte de pago. Mándame fotos y el año de tu vehículo al 📲 ${telefono}.` },
     { id: 'papeles', nombre: 'Papeles y mecánico', texto: `📄 ${v.matricula ? `Tiene la matrícula ${v.matricula.toLowerCase()}${v.ceroMultas ? ' y cero multas' : ''}. ` : ''}Puedes traer a tu mecánico de confianza 🔧.` },
     { id: 'horario', nombre: 'Horario y ubicación', texto: horario ? `⏰ Atendemos ${horario.charAt(0).toLowerCase() + horario.slice(1)}. Te espero en ${ubic(c)} 📍 — ${nombre}` : `📍 Te espero en ${ubic(c)}. Escríbeme para coordinar la visita 📲 ${telefono} — ${nombre}` },

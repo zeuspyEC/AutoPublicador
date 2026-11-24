@@ -258,6 +258,7 @@ export function interpretarSri(placa: string, crudo: BaseSri, rubros: RubroSri[]
     .sort((x, y) => String(y.fechaDePago).localeCompare(String(x.fechaDePago)))[0]
   if (ultimo) add(null, 'Último pago de matrícula', `${String(ultimo.fechaDePago).slice(0, 10)}${ultimo.monto ? ` · $${(+ultimo.monto).toFixed(2)}` : ''}`)
   if (deuda > 0) {
+    add('deuda', 'Valores pendientes de matrícula', `$${deuda.toFixed(2)}`, deuda.toFixed(2))
     // Rango completo de años adeudados («2017–2026»), no solo el último
     const desde = Math.min(...pendientes.map((r) => +(r.anioDesdePago ?? r.anioHastaPago ?? 0) || Infinity))
     const hasta = Math.max(...pendientes.map((r) => +(r.anioHastaPago ?? 0) || 0))

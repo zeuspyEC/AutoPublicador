@@ -22,7 +22,7 @@ export function FormVehiculo({ v, origenes, faltantes, cambiar }: Props) {
     <label className={`campo ${faltantes.includes(k) && !v[k] ? 'faltante' : ''}`}>
       <span>{etiqueta} {marca(k)}</span>
       <input value={v[k] as string} placeholder={props.placeholder} inputMode={props.inputMode} list={props.lista}
-        onChange={(e) => cambiar(k, (props.inputMode === 'numeric' ? e.target.value.replace(/\D/g, '') : e.target.value) as never)} />
+        onChange={(e) => cambiar(k, (props.inputMode === 'numeric' ? e.target.value.replace(/\D/g, '') : props.inputMode === 'decimal' ? e.target.value.replace(',', '.').replace(/[^\d.]/g, '') : e.target.value) as never)} />
     </label>
   )
   const casilla = (k: keyof Vehiculo, etiqueta: string) => (
@@ -56,6 +56,7 @@ export function FormVehiculo({ v, origenes, faltantes, cambiar }: Props) {
         {texto('matricula', 'Matrícula', { placeholder: 'Al día 2025' })}
         {texto('precio', 'Precio ($)', { inputMode: 'numeric' })}
         {texto('precioAnterior', 'Precio anterior ($)', { inputMode: 'numeric', placeholder: 'opcional' })}
+        {texto('deuda', 'Valores pendientes SRI ($)', { inputMode: 'decimal', placeholder: '0.00' })}
       </div>
       <datalist id="lista-combustible"><option>Gasolina</option><option>Diésel</option><option>Híbrido</option><option>Eléctrico</option></datalist>
 
@@ -89,7 +90,15 @@ export function FormVehiculo({ v, origenes, faltantes, cambiar }: Props) {
         {casilla('fullEquipo', 'Full equipo')}
         {casilla('negociable', 'Negociable')}
         {casilla('recibeCambio', 'Recibe cambio')}
+        {+(v.deuda || 0) > 0 && casilla('mostrarDeuda', `Mencionar la deuda ($${(+v.deuda).toFixed(2).replace('.', ',')}) junto al precio`)}
       </div>
+      {+(v.deuda || 0) > 0 && (
+        <p className="ayuda">
+          {v.mostrarDeuda
+            ? 'La deuda aparece en la línea del precio como motivo de «negociable».'
+            : 'Tú decides: la deuda no se menciona en la publicación (tampoco se publica «matrícula al día»).'}
+        </p>
+      )}
     </div>
   )
 }

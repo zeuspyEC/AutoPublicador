@@ -6,7 +6,7 @@ import type { Investigacion } from '../servicios/investigador'
 import type { Origen, Origenes, Vehiculo } from './tipos'
 
 /** Datos de identidad que el SRI conoce con certeza para una placa. */
-export const CAMPOS_OFICIALES: (keyof Vehiculo)[] = ['marca', 'modelo', 'anio', 'motor', 'color', 'procedencia', 'matricula', 'carroceria']
+export const CAMPOS_OFICIALES: (keyof Vehiculo)[] = ['marca', 'modelo', 'anio', 'motor', 'color', 'procedencia', 'matricula', 'carroceria', 'deuda']
 
 /** Detalles que dependen del modelo: si la placa es de otro modelo, los del texto no le corresponden. */
 export const CAMPOS_DEL_MODELO: (keyof Vehiculo)[] = ['version', 'motor', 'puertas', 'carroceria']

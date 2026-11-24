@@ -30,7 +30,7 @@ export default function App() {
   const [vista, setVista] = useState<Vista>('crear')
   const borrador = useMemo(() => almacen.borrador(), [])
   const [texto, setTexto] = useState(borrador?.texto ?? '')
-  const [v, setV] = useState<Vehiculo>(borrador?.vehiculo ?? VEHICULO_VACIO)
+  const [v, setV] = useState<Vehiculo>({ ...VEHICULO_VACIO, ...borrador?.vehiculo }) // completa campos nuevos en borradores antiguos
   const [origenes, setOrigenes] = useState<Origenes>(borrador?.origenes ?? {})
   const [generado, setGenerado] = useState(!!borrador?.vehiculo?.modelo)
   const [wiki, setWiki] = useState<EstadoInvestigacion>({ estado: 'inactivo' })
@@ -199,7 +199,7 @@ export default function App() {
 
   function abrir(p: Publicacion) {
     ronda.current++
-    setTexto(p.texto); setV(p.vehiculo); setOrigenes(p.origenes); setGenerado(true); setIdPublicacion(p.id)
+    setTexto(p.texto); setV({ ...VEHICULO_VACIO, ...p.vehiculo }); setOrigenes(p.origenes); setGenerado(true); setIdPublicacion(p.id)
     setWiki({ estado: 'inactivo' }); setGoogle({ estado: 'inactivo' }); setSri({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' })
     setPlaca(''); setPlacaConsultada(''); setCorrecciones([]); setDiferencias([]); setVista('crear')
   }

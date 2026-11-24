@@ -25,6 +25,8 @@ export interface Vehiculo {
   puertas: string
   precio: string // solo dígitos
   precioAnterior: string
+  deuda: string // valores pendientes de matrícula en el SRI (USD): «83.78»
+  mostrarDeuda: boolean // el vendedor decide si se menciona; va junto al precio como motivo de «negociable»
   matricula: string // «Al día 2025», «Al día»
   ceroMultas: boolean
   procedencia: string // «Argentina»
@@ -55,7 +57,7 @@ export interface Ajustes {
 
 export const VEHICULO_VACIO: Vehiculo = {
   marca: '', modelo: '', version: '', anio: '', motor: '', transmision: '', combustible: '', kilometraje: '',
-  color: '', carroceria: '', traccion: '', puertas: '', precio: '', precioAnterior: '', matricula: '',
+  color: '', carroceria: '', traccion: '', puertas: '', precio: '', precioAnterior: '', deuda: '', mostrarDeuda: false, matricula: '',
   ceroMultas: false, procedencia: '', equipamiento: [], notas: '', negociable: false, recibeCambio: false,
   fullEquipo: false, aTodaPrueba: false,
 }

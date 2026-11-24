@@ -323,3 +323,15 @@ describe('placa: textos sin afirmaciones falsas', () => {
     expect(descripciones(ctx).map((d) => d.texto).join('\n')).not.toMatch(/documentación en regla|papeles en regla/)
   })
 })
+
+describe('placa: monto pendiente para el campo de deuda', () => {
+  it('la matrícula pendiente llena «deuda» (sin el 1 % de traspaso)', () => {
+    const r = interpretarSri('PBA1234', { ...REAL, ultimoAnioPagado: 2025 } as BaseSri, [TRASPASO,
+      { codigoTipoDeuda: 'MATRICULA', descripcionRubro: 'TASA SPPAT', valorRubro: 41.83, anioHastaPago: 2026 },
+      { codigoTipoDeuda: 'MATRICULA', descripcionRubro: 'TASAS ANT', valorRubro: 36, anioHastaPago: 2026 }])
+    expect(r.hallazgos.find((h) => h.campo === 'deuda')?.opciones).toEqual(['77.83'])
+  })
+  it('al día: no hay deuda', () => {
+    expect(interpretarSri('PBA1234', REAL, [TRASPASO]).hallazgos.find((h) => h.campo === 'deuda')).toBeUndefined()
+  })
+})
