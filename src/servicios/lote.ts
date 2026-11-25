@@ -2,7 +2,7 @@
 // el modelo en Wikipedia y se generan título y descripción con las mismas plantillas de la app. Mismo flujo que una
 // consulta individual; nada se inventa: lo que no aparece en las fuentes queda vacío.
 import { fusionar } from '../dominio/fusion'
-import { descripciones, titulos } from '../dominio/plantillas'
+import { descripciones, publicacionVigente, titulos } from '../dominio/plantillas'
 import { VEHICULO_VACIO, type Ajustes, type Origenes, type Perfil, type Vehiculo } from '../dominio/tipos'
 import type { PlacaConsultada, Publicacion } from './almacen'
 import { investigarGoogle, investigarWikipedia, type Investigacion } from './investigador'
@@ -42,9 +42,10 @@ export async function publicacionDePlaca(placa: string, perfil: Perfil, ajustes:
     if (google) f = fusionar(f.vehiculo, f.origenes, google, 'google')
     const ctx = { v: f.vehiculo, perfil, beneficios: ajustes.beneficios, ubicacion: ajustes.ubicacion }
     const fecha = new Date().toISOString()
+    const seleccion = { tituloId: titulos(ctx)[0]?.id ?? '', descId: descripciones(ctx)[0]?.id ?? '', retoques: {} }
     const publicacion: Publicacion = {
       id: crypto.randomUUID(), fecha, texto: `Placa ${placa}`, vehiculo: f.vehiculo, origenes: f.origenes,
-      titulo: titulos(ctx)[0]?.texto ?? '', descripcion: descripciones(ctx)[0]?.texto ?? '', placa,
+      ...publicacionVigente(ctx, seleccion), seleccion, placa,
     }
     return { placa, ok: true, vehiculo: f.vehiculo, origenes: f.origenes, sri, wikipedia, publicacion,
       placaConsultada: { placa, fecha, resumen: resumenDePlaca(sri), resultado: sri } }

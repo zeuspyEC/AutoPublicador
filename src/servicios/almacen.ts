@@ -1,6 +1,7 @@
 // Datos guardados en este navegador (localStorage): perfil del vendedor, ajustes, borrador e historial.
 // No hay servidor: nada sale del teléfono o computador del vendedor (salvo las consultas de investigación).
 import type { Investigacion } from './investigador'
+import type { Seleccion } from '../dominio/retoques'
 import { hablaDePagos, BENEFICIOS_PREDETERMINADOS, UBICACION_PREDETERMINADA, type Ajustes, type Origenes, type Perfil, type Vehiculo } from '../dominio/tipos'
 
 export interface Publicacion {
@@ -11,6 +12,7 @@ export interface Publicacion {
   origenes: Origenes
   titulo: string
   descripcion: string
+  seleccion?: Seleccion // plantillas elegidas y retoques: con esto el texto se mantiene al día
   placa?: string // si se creó desde una placa (consulta individual o «Varias placas»)
 }
 
@@ -22,6 +24,8 @@ export interface PlacaConsultada {
   resultado: Investigacion
   sinRespuesta?: string // motivo: el SRI no devolvió datos (placa mal digitada, inexistente o sin conexión)
 }
+
+export interface Borrador { texto: string; vehiculo: Vehiculo; origenes: Origenes; id?: string; placa?: string; seleccion?: Seleccion }
 
 const CLAVES = { perfil: 'ap.perfil', ajustes: 'ap.ajustes', historial: 'ap.historial', borrador: 'ap.borrador', placas: 'ap.placas' }
 
@@ -47,6 +51,8 @@ export const almacen = {
     const h = almacen.historial().filter((x) => x.id !== p.id)
     escribir(CLAVES.historial, [p, ...h].slice(0, 200))
   },
+  /** Actualiza una publicación ya guardada sin cambiar su lugar en la lista. */
+  actualizarEnHistorial: (p: Publicacion) => escribir(CLAVES.historial, almacen.historial().map((x) => (x.id === p.id ? { ...p, fecha: x.fecha } : x))),
   borrarDeHistorial: (id: string) => escribir(CLAVES.historial, almacen.historial().filter((x) => x.id !== id)),
 
   placas: () => leer<PlacaConsultada[]>(CLAVES.placas) ?? [],
@@ -58,8 +64,8 @@ export const almacen = {
   },
   borrarPlaca: (placa: string) => escribir(CLAVES.placas, almacen.placas().filter((x) => x.placa !== placa)),
 
-  borrador: () => leer<{ texto: string; vehiculo: Vehiculo; origenes: Origenes }>(CLAVES.borrador),
-  guardarBorrador: (b: { texto: string; vehiculo: Vehiculo; origenes: Origenes }) => escribir(CLAVES.borrador, b),
+  borrador: () => leer<Borrador>(CLAVES.borrador),
+  guardarBorrador: (b: Borrador) => escribir(CLAVES.borrador, b),
 
   borrarTodo: () => Object.values(CLAVES).forEach((c) => { try { localStorage.removeItem(c) } catch { /* nada */ } }),
 }

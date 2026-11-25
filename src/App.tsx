@@ -1,6 +1,7 @@
+import { SELECCION_VACIA, type Seleccion } from './dominio/retoques'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { analizar } from './dominio/analizador'
-import { comentarios as generarComentarios, descripciones as generarDescripciones, titulos as generarTitulos } from './dominio/plantillas'
+import { publicacionVigente, comentarios as generarComentarios, descripciones as generarDescripciones, titulos as generarTitulos } from './dominio/plantillas'
 import { VEHICULO_VACIO, type Ajustes as TAjustes, type Origen, type Origenes, type Perfil, type Vehiculo } from './dominio/tipos'
 import { almacen, type PlacaConsultada, type Publicacion } from './servicios/almacen'
 import { investigarGoogle, investigarTextoPegado, investigarWikipedia, type Hallazgo, type Investigacion } from './servicios/investigador'
@@ -39,22 +40,82 @@ export default function App() {
   const [generado, setGenerado] = useState(!!borrador?.vehiculo?.modelo)
   const [wiki, setWiki] = useState<EstadoInvestigacion>({ estado: 'inactivo' })
   const [google, setGoogle] = useState<EstadoInvestigacion>({ estado: 'inactivo' })
-  const [placa, setPlaca] = useState('')
-  const [placaConsultada, setPlacaConsultada] = useState('')
+  const [placa, setPlaca] = useState(borrador?.placa ?? '')
+  const [placaConsultada, setPlacaConsultada] = useState(borrador?.placa ?? '')
+  const [seleccion, setSeleccion] = useState<Seleccion>(borrador?.seleccion ?? SELECCION_VACIA)
   const [sri, setSri] = useState<EstadoInvestigacion>({ estado: 'inactivo' })
   const [pegado, setPegado] = useState<EstadoInvestigacion>({ estado: 'inactivo' })
   const [correcciones, setCorrecciones] = useState<string[]>([])
   const [diferencias, setDiferencias] = useState<Diferencia[]>([])
   const [historial, setHistorial] = useState<Publicacion[]>(() => almacen.historial())
   const [placas, setPlacas] = useState<PlacaConsultada[]>(() => almacen.placas())
-  const [idPublicacion, setIdPublicacion] = useState<string>(() => crypto.randomUUID())
+  const [idPublicacion, setIdPublicacion] = useState<string>(() => borrador?.id ?? crypto.randomUUID())
   const textoGenerado = useRef(borrador?.texto ?? '')
+  const claveInvestigada = useRef(borrador?.vehiculo?.modelo ? `${borrador.vehiculo.marca}|${borrador.vehiculo.modelo}|${borrador.vehiculo.anio}` : '')
   const ronda = useRef(0) // descarta respuestas de investigaciones anteriores
   const vActual = useRef(v)
   vActual.current = v
   const resultadosRef = useRef<HTMLElement>(null)
 
-  useEffect(() => { almacen.guardarBorrador({ texto, vehiculo: v, origenes }) }, [texto, v, origenes])
+  useEffect(() => { almacen.guardarBorrador({ texto, vehiculo: v, origenes, id: idPublicacion, placa: placaConsultada, seleccion }) }, [texto, v, origenes, idPublicacion, placaConsultada, seleccion])
+
+  // Si la publicación ya está en el historial, cada cambio se guarda en ella al instante
+  const guardada = historial.some((x) => x.id === idPublicacion)
+  const huella = JSON.stringify([idPublicacion, v, seleccion])
+  const huellaAnterior = useRef(huella)
+  useEffect(() => {
+    const anterior = huellaAnterior.current
+    huellaAnterior.current = huella
+    if (!guardada || huella === anterior || JSON.parse(anterior)[0] !== idPublicacion) return
+    almacen.actualizarEnHistorial(publicacion())
+    setHistorial(almacen.historial())
+  }, [huella]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Otra pestaña de la app cambió algo: se refleja aquí
+  useEffect(() => {
+    const alCambiar = () => { setHistorial(almacen.historial()); setPlacas(almacen.placas()); setAjustes(almacen.ajustes()); setPerfil(almacen.perfil()) }
+    window.addEventListener('storage', alCambiar)
+    return () => window.removeEventListener('storage', alCambiar)
+  }, [])
+
+  // Texto libre en vivo: con la publicación ya generada, lo que se escribe actualiza los datos que vinieron del texto
+  useEffect(() => {
+    if (!generado || texto === textoGenerado.current) return
+    const t = setTimeout(() => {
+      textoGenerado.current = texto
+      const a = analizar(texto), nv = { ...vActual.current }, no = { ...origenesActuales.current }
+      for (const k of Object.keys(VEHICULO_VACIO) as (keyof Vehiculo)[]) {
+        if (no[k] && no[k] !== 'texto' && !((no[k] === 'wikipedia' || no[k] === 'google') && a.origenes[k])) continue // SRI y lo editado a mano mandan
+        ;(nv as unknown as Record<string, unknown>)[k] = a.vehiculo[k]
+        if (a.origenes[k]) no[k] = 'texto'; else delete no[k]
+      }
+      vActual.current = nv; origenesActuales.current = no
+      setV(nv); setOrigenes(no); setCorrecciones(a.correcciones)
+    }, 350)
+    return () => clearTimeout(t)
+  }, [texto, generado])
+
+  // Si cambia el modelo, lo investigado del modelo anterior ya no vale: se quita y se investiga el nuevo
+  const claveModelo = `${v.marca}|${v.modelo}|${v.anio}`
+  useEffect(() => {
+    if (!generado || sri.estado === 'buscando' || wiki.estado === 'buscando' || !claveInvestigada.current || claveModelo === claveInvestigada.current) return
+    const t = setTimeout(() => {
+      const nv = { ...vActual.current }, no = { ...origenesActuales.current }
+      for (const k of Object.keys(no) as (keyof Vehiculo)[]) if (no[k] === 'wikipedia' || no[k] === 'google') { (nv as unknown as Record<string, unknown>)[k] = VEHICULO_VACIO[k]; delete no[k] }
+      vActual.current = nv; origenesActuales.current = no
+      setV(nv); setOrigenes(no); setGoogle({ estado: 'inactivo' })
+      claveInvestigada.current = claveModelo
+      const n = ++ronda.current
+      buscarWikipedia(nv, n); buscarGoogle(nv, n)
+    }, 1200)
+    return () => clearTimeout(t)
+  }, [claveModelo, generado, sri.estado, wiki.estado]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** La publicación en pantalla, con el texto vigente. */
+  function publicacion(): Publicacion {
+    const textos = ctx ? publicacionVigente(ctx, seleccion) : { titulo: '', descripcion: '' }
+    return { id: idPublicacion, fecha: new Date().toISOString(), texto, vehiculo: v, origenes, ...textos, seleccion, placa: placaConsultada || undefined }
+  }
 
   const faltantes = IMPORTANTES.filter((k) => !v[k])
   const ctx = useMemo(() => (perfil ? { v, perfil, beneficios: ajustes.beneficios, ubicacion: ajustes.ubicacion } : null), [v, perfil, ajustes])
@@ -103,6 +164,7 @@ export default function App() {
   }
 
   async function buscarWikipedia(base: Vehiculo, n: number) {
+    claveInvestigada.current = `${base.marca}|${base.modelo}|${base.anio}`
     if (!base.modelo) { setWiki({ estado: 'inactivo' }); return }
     setWiki({ estado: 'buscando' })
     try {
@@ -134,7 +196,8 @@ export default function App() {
   async function generar() {
     const a = analizar(texto)
     // Mismo vehículo (misma placa y mismo texto): se vuelve a consultar sin perder lo que el vendedor marcó o editó a mano
-    if (generado && placaNormal === placaConsultada && texto === textoGenerado.current) {
+    const mismo = generado && placaNormal === placaConsultada && texto === textoGenerado.current
+    if (mismo) {
       for (const [k, o] of Object.entries(origenes) as [keyof Vehiculo, Origen][]) if (o === 'manual') {
         ;(a.vehiculo as unknown as Record<string, unknown>)[k] = v[k]
         a.origenes[k] = 'manual'
@@ -143,7 +206,7 @@ export default function App() {
     textoGenerado.current = texto
     const n = ++ronda.current
     vActual.current = a.vehiculo
-    setV(a.vehiculo); setOrigenes(a.origenes); setGenerado(true); setIdPublicacion(crypto.randomUUID()); setCorrecciones(a.correcciones); setDiferencias([]); origenesActuales.current = a.origenes
+    setV(a.vehiculo); setOrigenes(a.origenes); setGenerado(true); if (!mismo) { setIdPublicacion(crypto.randomUUID()); setSeleccion(SELECCION_VACIA) } setCorrecciones(a.correcciones); setDiferencias([]); origenesActuales.current = a.origenes
     setGoogle({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' }); setSri({ estado: 'inactivo' }); setWiki({ estado: 'inactivo' })
     setPlacaConsultada(placa.trim() ? placaNormal : '')
     setTimeout(() => resultadosRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
@@ -179,7 +242,7 @@ export default function App() {
     setGoogle({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' }); setWiki({ estado: 'inactivo' })
     setSri({ estado: 'listo', resultado: p.resultado })
     completarCon(p.resultado, 'sri')
-    setGenerado(true); setIdPublicacion(crypto.randomUUID()); setVista('crear')
+    setGenerado(true); setIdPublicacion(crypto.randomUUID()); setSeleccion(SELECCION_VACIA); setVista('crear')
     buscarWikipedia(vActual.current, n)
     buscarGoogle(vActual.current, n)
   }
@@ -217,6 +280,7 @@ export default function App() {
 
   function nuevo() {
     ronda.current++
+    claveInvestigada.current = ''; textoGenerado.current = ''; setSeleccion(SELECCION_VACIA)
     setTexto(''); setPlaca(''); setPlacaConsultada(''); setV(VEHICULO_VACIO); setOrigenes({}); setGenerado(false); setCorrecciones([]); setDiferencias([])
     setWiki({ estado: 'inactivo' }); setGoogle({ estado: 'inactivo' }); setSri({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' })
     setIdPublicacion(crypto.randomUUID())
@@ -226,6 +290,8 @@ export default function App() {
   function abrir(p: Publicacion) {
     ronda.current++
     textoGenerado.current = p.texto
+    claveInvestigada.current = `${p.vehiculo.marca}|${p.vehiculo.modelo}|${p.vehiculo.anio}`
+    setSeleccion(p.seleccion ?? SELECCION_VACIA)
     setTexto(p.texto); setV(migrar(p.vehiculo, VEHICULO_VACIO, (c) => p.origenes?.[c] === 'manual')); setOrigenes(p.origenes); setGenerado(true); setIdPublicacion(p.id)
     setWiki({ estado: 'inactivo' }); setGoogle({ estado: 'inactivo' }); setSri({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' })
     setPlaca(p.placa ?? ''); setPlacaConsultada(p.placa ?? ''); setCorrecciones([]); setDiferencias([]); setVista('crear')
@@ -328,10 +394,8 @@ export default function App() {
                 <section className="tarjeta paso">
                   <h2><span className="numero">4</span> Publicación lista</h2>
                   <Resultados v={v} titulos={titulos} descripciones={descripciones}
-                    alGuardar={(titulo, descripcion) => {
-                      almacen.guardarEnHistorial({ id: idPublicacion, fecha: new Date().toISOString(), texto, vehiculo: v, origenes, titulo, descripcion, placa: placaConsultada || undefined })
-                      setHistorial(almacen.historial())
-                    }} />
+                    seleccion={seleccion} cambiar={setSeleccion} guardada={guardada}
+                    alGuardar={() => { almacen.guardarEnHistorial(publicacion()); setHistorial(almacen.historial()) }} />
                 </section>
               </>
             )}

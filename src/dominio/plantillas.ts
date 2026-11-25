@@ -2,7 +2,8 @@
 // (gancho en mayúsculas + datos clave + emojis en el título; detalles, beneficios y contacto en la descripción).
 // Cada plantilla omite las líneas cuyos datos no se conocen: nada se inventa.
 import { formatearTelefono } from './telefono'
-import { beneficiosCoherentes, faltanEn, notasCoherentes, propias, vigentes } from './etiquetas'
+import { aplicarCambios, type Seleccion } from './retoques'
+import { beneficiosCoherentes, contradice, faltanEn, notasCoherentes, propias, vigentes } from './etiquetas'
 import { UBICACION_PREDETERMINADA, type Beneficio, type Perfil, type Vehiculo } from './tipos'
 
 export interface Variante {
@@ -364,11 +365,38 @@ export function descripciones(c: Contexto): Variante[] {
     { id: 'minima', nombre: 'Mínima (para repostear)', texto: minima },
   ].map((d) => {
     // Ninguna etiqueta vigente puede faltar: las que la plantilla no menciona van justo antes de las formas de pago
-    const extra = faltanEn(v, d.texto)
-    if (!extra.length) return d
-    const ls = d.texto.split('\n'), i = ls.findIndex((l) => l.startsWith('💵'))
+    // Igual con el precio y los datos del vehículo (las plantillas cortas solo suman el precio)
+    const minus = d.texto.toLocaleLowerCase('es')
+    const datos = d.id === 'corta' || d.id === 'minima' ? [] : [...detalles(v, '▫️'), v.combustible && !v.motor ? `▫️ Combustible: ${v.combustible}` : '']
+      .filter((l): l is string => !!l && !l.split(': ').slice(1).join(': ').split(/(?: \(| de (?=\d+ puertas)|, )/).map((x) => x.replace(/[).]+$/, '').trim().toLocaleLowerCase('es')).every((x) => minus.includes(x)))
+    const precio = precioLinea(v)
+    const faltaPrecio = precio && (!d.texto.includes(`$${miles(v.precio)}`) || (precio.includes('(antes') && d.id !== 'minima' && d.id !== 'corta'))
+    const cuerpo = faltaPrecio && d.texto.includes(`$${miles(v.precio)}`) ? d.texto.split('\n').map((l) => (l.includes(`$${miles(v.precio)}`) && !l.includes('antes') ? precio : l)).join('\n') : d.texto
+    const extra = [...datos, ...(faltaPrecio && cuerpo === d.texto && !d.texto.includes('(antes') ? [precio] : [])]
+    extra.push(...faltanEn(v, [cuerpo, ...extra].join('\n')))
+    if (!extra.length) return { ...d, texto: cuerpo }
+    const ls = cuerpo.split('\n'), i = ls.findIndex((l) => l.startsWith('💵'))
     return { ...d, texto: [...ls.slice(0, i), ...extra, ...ls.slice(i)].join('\n') }
   }).map((d) => ({ ...d, texto: `${telefono ? `📲 ${nombre}: ${telefono}\n\n` : ''}${d.texto}`.replace(/\n{3,}/g, '\n\n').trim() }))
+}
+
+/** Texto vigente de una variante: el generado o, si se retocó, el retoque con los cambios de datos ya aplicados. */
+export function textoVigente(v: Vehiculo, tipo: 't' | 'd', x: Variante | undefined, s: Seleccion): string {
+  const r = x && s.retoques[`${tipo}:${x.id}`]
+  if (!x || !r) return x?.texto ?? ''
+  const t = aplicarCambios(r, x.texto)
+  if (tipo === 't') return contradice(v, t) && !contradice(v, r.texto) ? x.texto : t
+  // Una línea retocada tampoco puede contradecir las etiquetas vigentes
+  return t === r.texto ? t : t.split('\n').filter((l) => !contradice(v, l)).join('\n')
+}
+
+/** Título y descripción elegidos, siempre con los datos, el perfil y los ajustes actuales. */
+export function publicacionVigente(c: Contexto, s: Seleccion): { titulo: string; descripcion: string } {
+  const ts = titulos(c), ds = descripciones(c)
+  return {
+    titulo: textoVigente(c.v, 't', ts.find((x) => x.id === s.tituloId) ?? ts[0], s),
+    descripcion: textoVigente(c.v, 'd', ds.find((x) => x.id === s.descId) ?? ds[0], s),
+  }
 }
 
 /** Comentarios y respuestas rápidas para la publicación («¿Sigue disponible?», precio, cambio, cita…). */

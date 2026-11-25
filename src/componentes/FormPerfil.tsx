@@ -3,9 +3,12 @@ import { ESTILOS_TELEFONO, formatearTelefono, normalizarTelefono, telefonoValido
 import type { Perfil } from '../dominio/tipos'
 
 /** Datos del vendedor: se piden al inicio y se editan en Ajustes. */
-export function FormPerfil({ inicial, alGuardar, textoBoton }: { inicial?: Perfil | null; alGuardar: (p: Perfil) => void; textoBoton: string }) {
-  const [p, setP] = useState<Perfil>(inicial ?? { nombre: '', telefono: '', estiloTelefono: 'guiones', horario: '' })
+export function FormPerfil({ inicial, alGuardar, textoBoton, enVivo = false }: { inicial?: Perfil | null; alGuardar: (p: Perfil) => void; textoBoton: string; enVivo?: boolean }) {
+  const [p, fijar] = useState<Perfil>(inicial ?? { nombre: '', telefono: '', estiloTelefono: 'guiones', horario: '' })
   const [tocado, setTocado] = useState(false)
+  const limpio = (x: Perfil): Perfil => ({ ...x, nombre: x.nombre.trim(), telefono: normalizarTelefono(x.telefono), horario: x.horario.trim() })
+  /** En Ajustes cada cambio válido se aplica al instante en todas las publicaciones. */
+  const setP = (x: Perfil) => { fijar(x); if (enVivo) { setTocado(true); if (x.nombre.trim().length >= 3 && telefonoValido(x.telefono)) alGuardar(limpio(x)) } }
   const nombreOk = p.nombre.trim().length >= 3
   const telOk = telefonoValido(p.telefono)
 
@@ -15,7 +18,7 @@ export function FormPerfil({ inicial, alGuardar, textoBoton }: { inicial?: Perfi
       onSubmit={(e) => {
         e.preventDefault()
         setTocado(true)
-        if (nombreOk && telOk) alGuardar({ ...p, nombre: p.nombre.trim(), telefono: normalizarTelefono(p.telefono), horario: p.horario.trim() })
+        if (nombreOk && telOk) alGuardar(limpio(p))
       }}
     >
       <label className="campo">
@@ -46,7 +49,8 @@ export function FormPerfil({ inicial, alGuardar, textoBoton }: { inicial?: Perfi
         <input value={p.horario} onChange={(e) => setP({ ...p, horario: e.target.value })} placeholder="Ej.: Todos los días de 08:30 a 17:30" />
         <small className="ayuda">Si lo dejas vacío, no se menciona en las publicaciones.</small>
       </label>
-      <button className="boton principal grande" type="submit">{textoBoton}</button>
+      {enVivo ? <p className="ayuda">{nombreOk && telOk ? '✓ Se guarda solo y se aplica al instante en todas tus publicaciones.' : 'Corrige lo marcado para que se aplique.'}</p>
+        : <button className="boton principal grande" type="submit">{textoBoton}</button>}
     </form>
   )
 }

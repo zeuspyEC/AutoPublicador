@@ -15,7 +15,6 @@ interface Props {
 export function Ajustes({ perfil, ajustes, guardarPerfil, guardarAjustes, borrarTodo }: Props) {
   const [nuevo, setNuevo] = useState('')
   const [clave, setClave] = useState(ajustes.claveGemini)
-  const [perfilOk, setPerfilOk] = useState(false)
   const [probando, setProbando] = useState(false)
   const [servidor, setServidor] = useState(ajustes.servidorPlacas)
   const [servidorOk, setServidorOk] = useState('')
@@ -26,7 +25,7 @@ export function Ajustes({ perfil, ajustes, guardarPerfil, guardarAjustes, borrar
     <div className="ajustes">
       <section className="tarjeta">
         <h2>Tu perfil</h2>
-        <FormPerfil inicial={perfil} textoBoton={perfilOk ? '✓ Guardado' : 'Guardar perfil'} alGuardar={(p) => { guardarPerfil(p); setPerfilOk(true) }} />
+        <FormPerfil inicial={perfil} textoBoton="Guardar perfil" enVivo alGuardar={guardarPerfil} />
       </section>
 
       <section className="tarjeta">
