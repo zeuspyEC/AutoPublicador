@@ -44,7 +44,7 @@ function anioDeDosDigitos(n: number): string {
 }
 
 export function analizar(texto: string): Analisis {
-  const v: Vehiculo = { ...VEHICULO_VACIO, equipamiento: [] }
+  const v: Vehiculo = { ...VEHICULO_VACIO, equipamiento: [], etiquetas: [] }
   const o: Origenes = {}
   const correcciones: string[] = []
   const poner = <K extends keyof Vehiculo>(k: K, valor: Vehiculo[K]) => { v[k] = valor; o[k] = 'texto' }
@@ -171,8 +171,10 @@ export function analizar(texto: string): Analisis {
   if (v.equipamiento.length) o.equipamiento = 'texto'
   if (/full equip|full extras|\bfull\b/.test(plano)) poner('fullEquipo', true)
   if (/toda prueba|a toda prueba/.test(plano)) poner('aTodaPrueba', true)
-  if (/negociable|conversable|escucho ofertas/.test(plano)) poner('negociable', true)
-  if (/\bcambio\b|cambi[oa]|parte de pago|recibo (?:carro|auto|moto)/.test(plano)) poner('recibeCambio', true)
+  if (/precio fijo|no (?:es )?negociable|sin rebaja/.test(plano)) poner('negociable', false)
+  else if (/negociable|conversable|escucho ofertas/.test(plano)) poner('negociable', true)
+  if (/(?:no|sin) (?:recib\w+ |acept\w+ |hago )?cambios?\b|no recib[oe] (?:carro|auto|moto)/.test(plano)) poner('recibeCambio', false)
+  else if (/\bcambio\b|cambi[oa]|parte de pago|recibo (?:carro|auto|moto)/.test(plano)) poner('recibeCambio', true)
 
   const notas: string[] = []
   if (/unico dueno|un solo dueno/.test(plano)) notas.push('Único dueño')

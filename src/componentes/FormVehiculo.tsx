@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { motivoInvalida } from '../dominio/etiquetas'
 import type { Origen, Origenes, Vehiculo } from '../dominio/tipos'
 
 const ETIQUETA_ORIGEN: Record<Origen, string> = { texto: 'de tu texto', sri: 'SRI', wikipedia: 'Wikipedia', google: 'Google', manual: 'editado' }
@@ -8,10 +9,15 @@ interface Props {
   origenes: Origenes
   faltantes: (keyof Vehiculo)[]
   cambiar: <K extends keyof Vehiculo>(campo: K, valor: Vehiculo[K]) => void
+  etiquetas: string[] // etiquetas propias disponibles
+  guardarEtiquetas: (e: string[]) => void
 }
 
 /** Formulario editable con todos los datos del vehículo; cada campo muestra de dónde salió. */
-export function FormVehiculo({ v, origenes, faltantes, cambiar }: Props) {
+export function FormVehiculo({ v, origenes, faltantes, cambiar, etiquetas, guardarEtiquetas }: Props) {
+  const [nuevaEtiqueta, setNuevaEtiqueta] = useState('')
+  const [errorEtiqueta, setErrorEtiqueta] = useState('')
+  const disponibles = [...new Set([...etiquetas, ...v.etiquetas])]
   const [nuevoEquipo, setNuevoEquipo] = useState('')
 
   const marca = (k: keyof Vehiculo) => {
@@ -88,14 +94,39 @@ export function FormVehiculo({ v, origenes, faltantes, cambiar }: Props) {
         {casilla('ceroMultas', 'Cero multas')}
         {casilla('aTodaPrueba', 'A toda prueba')}
         {casilla('fullEquipo', 'Full equipo')}
-        {casilla('negociable', 'Negociable')}
+        {casilla('negociable', v.negociable ? 'Negociable' : 'Negociable (ahora: precio fijo)')}
         {casilla('recibeCambio', 'Recibe cambio')}
         {+(v.deuda || 0) > 0 && casilla('mostrarDeuda', `Mencionar la deuda ($${(+v.deuda).toFixed(2).replace('.', ',')}) junto al precio`)}
+        {disponibles.map((e) => (
+          <span key={e} className="casilla">
+            <label>
+              <input type="checkbox" checked={v.etiquetas.includes(e)} onChange={(x) => cambiar('etiquetas', x.target.checked ? [...v.etiquetas, e] : v.etiquetas.filter((y) => y !== e))} />
+              <span>{e}</span>
+            </label>
+            <button type="button" className="icono" aria-label={`Eliminar la etiqueta ${e}`} onClick={() => {
+              if (!confirm(`¿Eliminar la etiqueta «${e}» de tu lista?`)) return
+              guardarEtiquetas(etiquetas.filter((y) => y !== e)); cambiar('etiquetas', v.etiquetas.filter((y) => y !== e))
+            }}>✕</button>
+          </span>
+        ))}
       </div>
+      <form className="fila nueva-etiqueta" onSubmit={(ev) => {
+        ev.preventDefault()
+        const n = nuevaEtiqueta.trim().replace(/\s+/g, ' ').replace(/\.$/, '')
+        const motivo = motivoInvalida(n, disponibles)
+        setErrorEtiqueta(motivo)
+        if (motivo) return
+        guardarEtiquetas([...etiquetas, n]); cambiar('etiquetas', [...v.etiquetas, n]); setNuevaEtiqueta('')
+      }}>
+        <input value={nuevaEtiqueta} maxLength={40} onChange={(e) => { setNuevaEtiqueta(e.target.value); setErrorEtiqueta('') }} placeholder="Nueva etiqueta: llantas nuevas, único dueño…" aria-label="Nueva etiqueta" />
+        <button className="boton secundario" type="submit">Agregar</button>
+      </form>
+      {errorEtiqueta && <p className="aviso">{errorEtiqueta}</p>}
+      <p className="ayuda">Cada etiqueta marcada o quitada se refleja al instante en todos los títulos, descripciones y respuestas.</p>
       {+(v.deuda || 0) > 0 && (
         <p className="ayuda">
           {v.mostrarDeuda
-            ? 'La deuda aparece en la línea del precio como motivo de «negociable».'
+            ? 'La deuda aparece en la línea del precio.'
             : 'Tú decides: la deuda no se menciona en la publicación (tampoco se publica «matrícula al día»).'}
         </p>
       )}

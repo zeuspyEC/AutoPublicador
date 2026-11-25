@@ -36,6 +36,7 @@ export interface Vehiculo {
   recibeCambio: boolean
   fullEquipo: boolean
   aTodaPrueba: boolean
+  etiquetas: string[] // etiquetas propias marcadas para este vehículo
 }
 
 /** De dónde salió cada dato: así se sabe qué se escribió, qué se investigó y qué se corrigió a mano. */
@@ -53,13 +54,14 @@ export interface Ajustes {
   claveGemini: string // opcional: investigación en Google con Gemini (se guarda solo en este navegador)
   servidorPlacas: string // opcional: URL del servidor de placas propio (carpeta /servidor); vacío = el predeterminado
   ubicacion: string
+  etiquetas: string[] // etiquetas propias creadas por el vendedor, disponibles para todos los vehículos
 }
 
 export const VEHICULO_VACIO: Vehiculo = {
   marca: '', modelo: '', version: '', anio: '', motor: '', transmision: '', combustible: '', kilometraje: '',
   color: '', carroceria: '', traccion: '', puertas: '', precio: '', precioAnterior: '', deuda: '', mostrarDeuda: false, matricula: '',
-  ceroMultas: false, procedencia: '', equipamiento: [], notas: '', negociable: false, recibeCambio: false,
-  fullEquipo: false, aTodaPrueba: false,
+  ceroMultas: false, procedencia: '', equipamiento: [], notas: '', negociable: true, recibeCambio: true, // lo habitual del negocio; al desmarcar «negociable» el precio es fijo
+  fullEquipo: false, aTodaPrueba: false, etiquetas: [],
 }
 
 export const UBICACION_PREDETERMINADA = 'Sector El Inca (Norte de Quito)'

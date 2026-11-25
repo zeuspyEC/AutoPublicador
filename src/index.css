@@ -99,6 +99,10 @@ textarea.entrada { font-size: 1.05rem; }
   border-radius: 999px; cursor: pointer; background: var(--superficie-2);
 }
 .casilla input { width: auto; min-height: 0; }
+.casilla label { display: inline-flex; align-items: center; gap: .4rem; cursor: pointer; }
+.casilla .icono { padding: 0 .2rem; min-height: 0; }
+.nueva-etiqueta { margin-top: .6rem; }
+.nueva-etiqueta input { flex: 1 1 180px; min-width: 0; }
 .ayuda { color: var(--texto-2); font-size: .88rem; margin: .2rem 0 .6rem; }
 .pasos { padding-left: 1.2rem; }
 .error { color: var(--peligro); }
@@ -192,7 +196,8 @@ textarea.entrada { font-size: 1.05rem; }
 @media (max-width: 480px) {
   .barra { flex-direction: column; align-items: stretch; gap: .4rem; }
   .barra nav { justify-content: space-between; }
-  .barra nav button { flex: 1; }
+  .barra nav { gap: 0; overflow-x: auto; scrollbar-width: none; }
+  .barra nav button { flex: 1 0 auto; padding: .45rem .35rem; font-size: .9rem; }
   .contenido { padding: .75rem; }
   .tarjeta { padding: .85rem; }
   .rejilla { grid-template-columns: 1fr 1fr; }

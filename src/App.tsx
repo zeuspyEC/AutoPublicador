@@ -13,9 +13,11 @@ import { FormVehiculo } from './componentes/FormVehiculo'
 import { Historial } from './componentes/Historial'
 import { PanelInvestigacion, type EstadoInvestigacion } from './componentes/PanelInvestigacion'
 import { fusionar, valorParaCampo, type Diferencia } from './dominio/fusion'
+import { migrar } from './dominio/etiquetas'
+import { Respuestas } from './componentes/Respuestas'
 import { Resultados } from './componentes/Resultados'
 
-type Vista = 'crear' | 'historial' | 'ajustes'
+type Vista = 'crear' | 'historial' | 'ajustes' | 'respuestas'
 
 const IMPORTANTES: (keyof Vehiculo)[] = ['marca', 'modelo', 'anio', 'motor', 'transmision', 'precio']
 const NOMBRE_CAMPO: Partial<Record<keyof Vehiculo, string>> = { marca: 'marca', modelo: 'modelo', version: 'versión', puertas: 'puertas', anio: 'año', motor: 'motor', transmision: 'transmisión', precio: 'precio', color: 'color', procedencia: 'procedencia', matricula: 'matrícula', carroceria: 'carrocería' }
@@ -32,7 +34,7 @@ export default function App() {
   const [vista, setVista] = useState<Vista>('crear')
   const borrador = useMemo(() => almacen.borrador(), [])
   const [texto, setTexto] = useState(borrador?.texto ?? '')
-  const [v, setV] = useState<Vehiculo>({ ...VEHICULO_VACIO, ...borrador?.vehiculo }) // completa campos nuevos en borradores antiguos
+  const [v, setV] = useState<Vehiculo>(() => migrar(borrador?.vehiculo, VEHICULO_VACIO, (c) => borrador?.origenes?.[c] === 'manual')) // completa borradores antiguos
   const [origenes, setOrigenes] = useState<Origenes>(borrador?.origenes ?? {})
   const [generado, setGenerado] = useState(!!borrador?.vehiculo?.modelo)
   const [wiki, setWiki] = useState<EstadoInvestigacion>({ estado: 'inactivo' })
@@ -46,6 +48,7 @@ export default function App() {
   const [historial, setHistorial] = useState<Publicacion[]>(() => almacen.historial())
   const [placas, setPlacas] = useState<PlacaConsultada[]>(() => almacen.placas())
   const [idPublicacion, setIdPublicacion] = useState<string>(() => crypto.randomUUID())
+  const textoGenerado = useRef(borrador?.texto ?? '')
   const ronda = useRef(0) // descarta respuestas de investigaciones anteriores
   const vActual = useRef(v)
   vActual.current = v
@@ -130,6 +133,14 @@ export default function App() {
 
   async function generar() {
     const a = analizar(texto)
+    // Mismo vehículo (misma placa y mismo texto): se vuelve a consultar sin perder lo que el vendedor marcó o editó a mano
+    if (generado && placaNormal === placaConsultada && texto === textoGenerado.current) {
+      for (const [k, o] of Object.entries(origenes) as [keyof Vehiculo, Origen][]) if (o === 'manual') {
+        ;(a.vehiculo as unknown as Record<string, unknown>)[k] = v[k]
+        a.origenes[k] = 'manual'
+      }
+    }
+    textoGenerado.current = texto
     const n = ++ronda.current
     vActual.current = a.vehiculo
     setV(a.vehiculo); setOrigenes(a.origenes); setGenerado(true); setIdPublicacion(crypto.randomUUID()); setCorrecciones(a.correcciones); setDiferencias([]); origenesActuales.current = a.origenes
@@ -163,6 +174,7 @@ export default function App() {
     const n = ++ronda.current
     const a = descripcion.trim() ? analizar(descripcion) : { vehiculo: VEHICULO_VACIO, origenes: {} as Origenes, correcciones: [] }
     vActual.current = a.vehiculo
+    textoGenerado.current = descripcion
     setTexto(descripcion); setPlaca(p.placa); setPlacaConsultada(p.placa); setCorrecciones(a.correcciones); setDiferencias([]); setOrigenes(a.origenes); origenesActuales.current = a.origenes; setV(a.vehiculo)
     setGoogle({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' }); setWiki({ estado: 'inactivo' })
     setSri({ estado: 'listo', resultado: p.resultado })
@@ -213,7 +225,8 @@ export default function App() {
 
   function abrir(p: Publicacion) {
     ronda.current++
-    setTexto(p.texto); setV({ ...VEHICULO_VACIO, ...p.vehiculo }); setOrigenes(p.origenes); setGenerado(true); setIdPublicacion(p.id)
+    textoGenerado.current = p.texto
+    setTexto(p.texto); setV(migrar(p.vehiculo, VEHICULO_VACIO, (c) => p.origenes?.[c] === 'manual')); setOrigenes(p.origenes); setGenerado(true); setIdPublicacion(p.id)
     setWiki({ estado: 'inactivo' }); setGoogle({ estado: 'inactivo' }); setSri({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' })
     setPlaca(p.placa ?? ''); setPlacaConsultada(p.placa ?? ''); setCorrecciones([]); setDiferencias([]); setVista('crear')
   }
@@ -239,9 +252,9 @@ export default function App() {
           <small>{perfil.nombre}</small>
         </div>
         <nav>
-          {(['crear', 'historial', 'ajustes'] as Vista[]).map((x) => (
-            <button key={x} type="button" className={vista === x ? 'activa' : ''} onClick={() => setVista(x)}>
-              {x === 'crear' ? 'Crear' : x === 'historial' ? `Historial${historial.length + placas.length ? ` (${historial.length + placas.length})` : ''}` : 'Ajustes'}
+          {(['crear', 'historial', 'ajustes', 'respuestas'] as Vista[]).map((x) => (
+            <button key={x} type="button" className={vista === x ? 'activa' : ''} onClick={() => { setVista(x); if (x === 'respuestas') window.scrollTo(0, 0) }}>
+              {x === 'crear' ? 'Crear' : x === 'historial' ? `Historial${historial.length + placas.length ? ` (${historial.length + placas.length})` : ''}` : x === 'ajustes' ? 'Ajustes' : 'Respuestas'}
             </button>
           ))}
         </nav>
@@ -253,6 +266,10 @@ export default function App() {
             guardarPerfil={(p) => { almacen.guardarPerfil(p); setPerfil(p) }}
             guardarAjustes={(a) => { almacen.guardarAjustes(a); setAjustes(a) }}
             borrarTodo={() => { almacen.borrarTodo(); location.reload() }} />
+        )}
+
+        {vista === 'respuestas' && (
+          <Respuestas lista={generado ? comentarios : []} vehiculo={[v.marca, v.modelo, v.anio].filter(Boolean).join(' ')} irACrear={() => setVista('crear')} />
         )}
 
         {vista === 'historial' && (
@@ -297,7 +314,8 @@ export default function App() {
                   {faltantes.length > 0 && (
                     <p className="aviso">Faltan datos importantes: {faltantes.map((f) => NOMBRE_CAMPO[f]).join(', ')}. Complétalos para una publicación más completa.</p>
                   )}
-                  <FormVehiculo v={v} origenes={origenes} faltantes={faltantes} cambiar={cambiar} />
+                  <FormVehiculo v={v} origenes={origenes} faltantes={faltantes} cambiar={cambiar}
+                    etiquetas={ajustes.etiquetas} guardarEtiquetas={(e) => { const a = { ...ajustes, etiquetas: e }; almacen.guardarAjustes(a); setAjustes(a) }} />
                 </section>
 
                 <section className="tarjeta paso">
@@ -309,7 +327,7 @@ export default function App() {
 
                 <section className="tarjeta paso">
                   <h2><span className="numero">4</span> Publicación lista</h2>
-                  <Resultados v={v} titulos={titulos} descripciones={descripciones} comentarios={comentarios}
+                  <Resultados v={v} titulos={titulos} descripciones={descripciones}
                     alGuardar={(titulo, descripcion) => {
                       almacen.guardarEnHistorial({ id: idPublicacion, fecha: new Date().toISOString(), texto, vehiculo: v, origenes, titulo, descripcion, placa: placaConsultada || undefined })
                       setHistorial(almacen.historial())

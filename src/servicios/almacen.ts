@@ -38,7 +38,7 @@ export const almacen = {
 
   ajustes: (): Ajustes => {
     const a = leer<Partial<Ajustes>>(CLAVES.ajustes) ?? {}
-    return { beneficios: (a.beneficios ?? BENEFICIOS_PREDETERMINADOS).filter((b) => !hablaDePagos(b.texto)), claveGemini: a.claveGemini ?? '', ubicacion: a.ubicacion || UBICACION_PREDETERMINADA, servidorPlacas: a.servidorPlacas ?? '' }
+    return { beneficios: (a.beneficios ?? BENEFICIOS_PREDETERMINADOS).filter((b) => !hablaDePagos(b.texto)), claveGemini: a.claveGemini ?? '', ubicacion: a.ubicacion || UBICACION_PREDETERMINADA, servidorPlacas: a.servidorPlacas ?? '', etiquetas: a.etiquetas ?? [] }
   },
   guardarAjustes: (a: Ajustes) => escribir(CLAVES.ajustes, a),
 
