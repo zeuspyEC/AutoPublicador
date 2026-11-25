@@ -92,8 +92,8 @@ describe('plantillas', () => {
     const t = titulos(ctx)
     expect(t.length).toBeGreaterThanOrEqual(6)
     expect(new Set(t.map((x) => x.texto)).size).toBe(t.length)
-    expect(t[0].texto).toBe('VENDO//CAMBIO 🔥 PEUGEOT 206 1.6L 2008 AL DÍA 2025 ✅ A TODA PRUEBA 💯')
-    expect(t[1].texto).toBe('🔥 PEUGEOT 206 XT 1.6L / TECHO + PANTALLA 🚗')
+    expect(t[0].texto).toBe('VENDO//CAMBIO 🔥 PEUGEOT 206 2008 1.6L AL DÍA 2025 ✅ A TODA PRUEBA 💯 📲 0987--654--321')
+    expect(t[1].texto).toBe('🔥 PEUGEOT 206 XT 2008 1.6L / TECHO + PANTALLA 🚗 📲 0987--654--321')
     for (const x of t) expect(x.texto).not.toMatch(/\s{2,}|undefined|null/)
   })
   it('las descripciones llevan nombre, ubicación y el teléfono nunca limpio', () => {
@@ -259,5 +259,34 @@ describe('deuda del SRI: el vendedor decide si se menciona, y va junto al precio
   })
   it('sin deuda registrada, la casilla no tiene efecto', async () => {
     expect(await textos({ ...base, deuda: '', mostrarDeuda: true })).not.toMatch(/pendientes de matrícula/)
+  })
+})
+
+describe('pagos y teléfono en todas las plantillas', () => {
+  const estilos = ['guiones', 'puntos', 'diagonales', 'mixto', 'emoji'] as const
+  const textos = ['Jeep Patriot 2.4 2010 4x4 automático 9500 negociable matrícula al día 2025 120000 km', 'Kia Rio 2016', 'Chevrolet Vitara Clásico 3P DLX 1997 T/M A/A a toda prueba recibo cambio techo pantalla único dueño']
+  const beneficios = [{ id: 'x', texto: 'Financiamiento directo', activo: true }, { id: 'y', texto: 'Aceptamos tarjetas de crédito', activo: true }, ...BENEFICIOS_PREDETERMINADOS]
+  for (const estilo of estilos) for (const texto of textos) it(`${estilo}: ${texto.slice(0, 20)}`, () => {
+    const p: Perfil = { ...perfil, estiloTelefono: estilo }
+    const v = { ...analizar(texto).vehiculo, notas: 'Buen estado, financiamiento disponible' }
+    const ctx = { v, perfil: p, beneficios }
+    const t = formatearTelefono(p.telefono, estilo)
+    for (const x of titulos(ctx)) {
+      expect(x.texto.endsWith(t), x.texto).toBe(true)
+      expect([...x.texto].length, x.texto).toBeLessThanOrEqual(100)
+      expect(x.texto).not.toMatch(/\s{2,}|undefined/)
+      if (v.anio && x.id !== 'oportunidad') expect(x.texto).toContain(v.anio)
+    }
+    for (const d of descripciones(ctx)) {
+      const ls = d.texto.split('\n')
+      expect(ls[0], d.id).toContain(t)
+      expect(ls.at(-1), d.id).toContain(t)
+      expect(d.texto.split(t).length - 1, d.id).toBe(2)
+      expect(d.texto.match(/financiamiento/gi), d.id).toHaveLength(1)
+      expect(d.texto, d.id).toContain('NO DAMOS FINANCIAMIENTO')
+      expect(d.texto, d.id).toMatch(/solo de contado/i)
+      expect(d.texto.match(/parte de pago/gi), d.id).toHaveLength(1)
+      expect(d.texto, d.id).not.toMatch(/crédito|cuotas/i)
+    }
   })
 })

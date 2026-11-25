@@ -64,12 +64,13 @@ export const VEHICULO_VACIO: Vehiculo = {
 
 export const UBICACION_PREDETERMINADA = 'Sector El Inca (Norte de Quito)'
 
+/** Formas de pago: son fijas en las plantillas (contado, tarjeta, auto o moto como parte de pago; sin financiamiento). */
+export const hablaDePagos = (s: string) => /financi|cr[eé]dito|cuotas|tarjeta|contado|parte de pago/i.test(s)
+
 export const BENEFICIOS_PREDETERMINADOS: Beneficio[] = [
   { id: 'negociable', texto: 'Precio negociable en el patio (trato directo)', activo: true },
-  { id: 'cambio', texto: 'Recibimos tu auto o moto como parte de pago', activo: true },
   { id: 'mecanico', texto: 'Trae a tu mecánico de confianza sin compromiso', activo: true },
   { id: 'garantia', texto: 'Garantía incluida', activo: true },
   { id: 'entrega', texto: 'Entrega inmediata', activo: true },
-  { id: 'pagos', texto: 'Aceptamos tarjetas de crédito y efectivo', activo: true },
   { id: 'notaria', texto: 'Escritura directa en notaría', activo: true },
 ]

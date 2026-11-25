@@ -1,7 +1,7 @@
 // Datos guardados en este navegador (localStorage): perfil del vendedor, ajustes, borrador e historial.
 // No hay servidor: nada sale del teléfono o computador del vendedor (salvo las consultas de investigación).
 import type { Investigacion } from './investigador'
-import { BENEFICIOS_PREDETERMINADOS, UBICACION_PREDETERMINADA, type Ajustes, type Origenes, type Perfil, type Vehiculo } from '../dominio/tipos'
+import { hablaDePagos, BENEFICIOS_PREDETERMINADOS, UBICACION_PREDETERMINADA, type Ajustes, type Origenes, type Perfil, type Vehiculo } from '../dominio/tipos'
 
 export interface Publicacion {
   id: string
@@ -37,7 +37,7 @@ export const almacen = {
 
   ajustes: (): Ajustes => {
     const a = leer<Partial<Ajustes>>(CLAVES.ajustes) ?? {}
-    return { beneficios: a.beneficios ?? BENEFICIOS_PREDETERMINADOS, claveGemini: a.claveGemini ?? '', ubicacion: a.ubicacion || UBICACION_PREDETERMINADA, servidorPlacas: a.servidorPlacas ?? '' }
+    return { beneficios: (a.beneficios ?? BENEFICIOS_PREDETERMINADOS).filter((b) => !hablaDePagos(b.texto)), claveGemini: a.claveGemini ?? '', ubicacion: a.ubicacion || UBICACION_PREDETERMINADA, servidorPlacas: a.servidorPlacas ?? '' }
   },
   guardarAjustes: (a: Ajustes) => escribir(CLAVES.ajustes, a),
 

@@ -42,7 +42,7 @@ export function Ajustes({ perfil, ajustes, guardarPerfil, guardarAjustes, borrar
 
       <section className="tarjeta">
         <h2>Beneficios que se ofrecen</h2>
-        <p className="ayuda">Se incluyen en las descripciones. Marca los que aplican y edita el texto si lo necesitas.</p>
+        <p className="ayuda">Se incluyen en las descripciones. Marca los que aplican y edita el texto si lo necesitas. Las formas de pago son fijas en todas las plantillas: solo contado (efectivo o tarjeta), auto o moto como parte de pago y sin financiamiento.</p>
         <ul className="beneficios">
           {ajustes.beneficios.map((b, i) => (
             <li key={b.id}>

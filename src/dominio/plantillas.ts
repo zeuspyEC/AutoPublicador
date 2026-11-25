@@ -2,7 +2,7 @@
 // (gancho en mayúsculas + datos clave + emojis en el título; detalles, beneficios y contacto en la descripción).
 // Cada plantilla omite las líneas cuyos datos no se conocen: nada se inventa.
 import { formatearTelefono } from './telefono'
-import { UBICACION_PREDETERMINADA, type Beneficio, type Perfil, type Vehiculo } from './tipos'
+import { hablaDePagos, UBICACION_PREDETERMINADA, type Beneficio, type Perfil, type Vehiculo } from './tipos'
 
 export interface Variante {
   id: string
@@ -53,7 +53,25 @@ function equipoTitulo(v: Vehiculo, n = 2) {
 
 function tel(c: Contexto) { return formatearTelefono(c.perfil.telefono, c.perfil.estiloTelefono) }
 function ubic(c: Contexto) { return c.ubicacion || UBICACION_PREDETERMINADA }
-function activos(c: Contexto) { return c.beneficios.filter((b) => b.activo).map((b) => b.texto) }
+/** Los beneficios sobre formas de pago no se repiten: el bloque fijo de pagos es la única fuente (y nunca se ofrece financiamiento). */
+function activos(c: Contexto) { return c.beneficios.filter((b) => b.activo && !hablaDePagos(b.texto)).map((b) => b.texto) }
+
+/** Formas de pago del negocio: van en todas las descripciones. Solo contado; no hay financiamiento. */
+export const PAGOS = [
+  '💵 VENTA SOLO DE CONTADO: efectivo o tarjeta.',
+  '🔄 Recibimos tu auto o moto como parte de pago.',
+  '🚫 NO DAMOS FINANCIAMIENTO.',
+]
+/** Notas del vendedor sin frases que ofrezcan financiamiento. */
+const notasSinFinanciamiento = (s: string) => s.split(/\s*[,;]\s*|\.\s+/).filter((f) => f && !/financi|cr[eé]dito|cuotas/i.test(f)).join(', ')
+
+/** Añade el teléfono al final del título y, si no cabe, quita los datos menos importantes (los últimos), nunca el teléfono. */
+function conTelefono(partes: string[], telefono: string): string {
+  const armar = (ps: string[]) => limpiar([limpiar(ps.filter(Boolean).join(' ')).replace(/(\s*[|—/]\s*)+$/, ''), telefono && `📲 ${telefono}`].filter(Boolean).join(' '))
+  const ps = partes.filter(Boolean)
+  while (ps.length > 2 && [...armar(ps)].length > LIMITE_TITULO) ps.pop()
+  return armar(ps)
+}
 
 /** Frase de uso según la carrocería (para el párrafo inicial). */
 function idealPara(v: Vehiculo): string {
@@ -72,29 +90,34 @@ export function titulos(c: Contexto): Variante[] {
   const M = motorL(v), A = v.anio, T = transmision(v)
   const mat = v.matricula ? `${matriculaCorta(v)} ✅` : ''
   const eq = equipoTitulo(v)
-  const lista: [string, string][] = [
-    ['gancho-cambio', `VENDO//CAMBIO 🔥 ${N} ${M} ${A} ${mat} ${T} ${v.aTodaPrueba ? 'A TODA PRUEBA' : ''} 💯`],
-    ['full-equipo', `🔥 ${NV} ${M} ${v.fullEquipo ? 'FULL EQUIPO' : ''} ${eq ? '/ ' + eq : ''} 🚗`],
-    ['oportunidad', `VENDO DE OPORTUNIDAD ${nombreVehiculo(v)} ${A ? `del año ${anioCorto(v)}` : ''} ${v.matricula ? 'papeles al día' : ''} ${v.aTodaPrueba ? 'a toda prueba' : ''}`],
-    ['explosion', `VENDO//CAMBIO 💥 ${NV} ${A} ${v.matricula ? mayus(v.matricula) : ''} ${v.aTodaPrueba ? 'TODA PRUEBA' : ''} 💯✅`],
-    ['directo', `🚗 ${N} ${A} ${M} ${T} | ${v.matricula ? 'MATRÍCULA AL DÍA' : ''} ${v.negociable ? '| NEGOCIABLE ✅' : ''}`],
-    ['recibo-auto', `💥 OPORTUNIDAD ${N} ${A} ${M} — RECIBO TU AUTO O MOTO 🔄`],
-    ['traspaso', `✅ ${NV} ${A} ${v.matricula ? 'PAPELES AL DÍA 📄' : ''} LISTO PARA TRASPASO`],
-    ['equipado', `⭐ ${N} ${A} ${eq || (v.fullEquipo ? 'FULL EQUIPO' : T)} | ENTREGA INMEDIATA 🔑`],
+  const prueba = v.aTodaPrueba ? 'A TODA PRUEBA' : ''
+  // Cada título es una lista de partes en orden de importancia: si con el teléfono no cabe, se quitan desde el final
+  const lista: [string, string[]][] = [
+    ['gancho-cambio', ['VENDO//CAMBIO 🔥', N, A, M, mat, T, prueba, '💯']],
+    ['full-equipo', ['🔥', NV, A, M, v.fullEquipo ? 'FULL EQUIPO' : '', eq ? '/ ' + eq : '', '🚗']],
+    ['oportunidad', ['VENDO DE OPORTUNIDAD', nombreVehiculo(v), A ? `del año ${anioCorto(v)}` : '', v.matricula ? 'papeles al día' : '', v.aTodaPrueba ? 'a toda prueba' : '']],
+    ['explosion', ['VENDO//CAMBIO 💥', NV, A, v.matricula ? matriculaCorta(v) : '', prueba, '💯✅']],
+    ['directo', ['🚗', N, A, M, T, v.matricula ? '| MATRÍCULA AL DÍA' : '', v.negociable ? '| NEGOCIABLE ✅' : '']],
+    ['recibo-auto', ['💥 RECIBO TU AUTO O MOTO 🔄', N, A, M]],
+    ['contado', ['💵 DE CONTADO', NV, A, M, '| SIN FINANCIAMIENTO 🚫']],
+    ['traspaso', ['✅', NV, A, v.matricula ? 'PAPELES AL DÍA 📄' : '', 'LISTO PARA TRASPASO']],
+    ['equipado', ['⭐', N, A, eq || (v.fullEquipo ? 'FULL EQUIPO' : T), '| ENTREGA INMEDIATA 🔑']],
   ]
   // Títulos que solo aparecen cuando el dato que los sostiene existe (nada se inventa)
-  if (v.kilometraje && +v.kilometraje < 150000) lista.push(['kilometraje', `✅ ${N} ${A} SOLO ${miles(v.kilometraje)} KM 🛣️ ${mat}`])
-  if (/único dueño/i.test(v.notas)) lista.push(['unico-dueno', `👤 ÚNICO DUEÑO ${NV} ${A} ${M} ${mat} 💯`])
-  if (v.recibeCambio) lista.push(['cambio-moto', `VENDO//CAMBIO POR MOTO O CARRO 🏍️🚗 ${N} ${A} ${mat}`])
-  if (/suv|jeep|camioneta|pickup/i.test(v.carroceria) || /4x4/i.test(v.traccion)) lista.push(['familia', `🚙 ${N} ${A} ${v.traccion ? mayus(v.traccion) : ''} IDEAL PARA LA FAMILIA Y EL CAMPO ✅ ${M} ${T}`])
-  if (v.negociable && v.precio) lista.push(['remate', `🔥 REMATO ${N} ${A} ${M} ${T} ¡NEGOCIABLE! 💥`])
+  if (v.kilometraje && +v.kilometraje < 150000) lista.push(['kilometraje', ['✅', N, A, `SOLO ${miles(v.kilometraje)} KM 🛣️`, mat]])
+  if (/único dueño/i.test(v.notas)) lista.push(['unico-dueno', ['👤 ÚNICO DUEÑO', NV, A, M, mat, '💯']])
+  if (v.recibeCambio) lista.push(['cambio-moto', ['CAMBIO POR MOTO O CARRO 🏍️🚗', N, A, mat]])
+  if (/suv|jeep|camioneta|pickup/i.test(v.carroceria) || /4x4/i.test(v.traccion)) lista.push(['familia', ['🚙', N, A, v.traccion ? mayus(v.traccion) : '', 'IDEAL PARA LA FAMILIA Y EL CAMPO ✅', M, T]])
+  if (v.negociable && v.precio) lista.push(['remate', ['🔥 REMATO', N, A, '¡NEGOCIABLE! 💥', M, T]])
+  const telefono = tel(c)
   return lista
-    .map(([id, t]) => ({ id, nombre: `Título ${id}`, texto: limpiar(t.replace(/\|\s*\|/g, '|').replace(/\|\s*$/, '')) }))
+    .map(([id, partes]) => ({ id, nombre: `Título ${id}`, texto: conTelefono(partes, telefono) }))
     .filter((x, i, arr) => arr.findIndex((y) => y.texto === x.texto) === i)
 }
 
 // ---------- descripciones ----------
 function detalles(v: Vehiculo, prefijo = '✅'): string[] {
+  const notas = notasSinFinanciamiento(v.notas)
   return bloque(
     nombreVehiculo(v) && `${prefijo} Marca/Modelo: ${limpiar(`${nombreVehiculo(v)} ${motorL(v)}`)}`,
     v.anio && `${prefijo} Año: ${v.anio}${v.procedencia ? ` (Procedencia ${v.procedencia})` : ''}`,
@@ -108,7 +131,7 @@ function detalles(v: Vehiculo, prefijo = '✅'): string[] {
     v.color && `${prefijo} Color: ${v.color}`,
     v.matricula && `${prefijo} Matrícula: ${v.matricula}${v.ceroMultas ? ' (Cero multas)' : ''}`,
     v.equipamiento.length > 0 && `${prefijo} Equipamiento: ${v.equipamiento.join(', ')}.`,
-    v.notas && `${prefijo} Estado: ${v.notas}.`,
+    notas && `${prefijo} Estado: ${notas}.`,
     v.aTodaPrueba && `${prefijo} Mecánica: A toda prueba, puedes traer a tu mecánico de confianza.`,
   )
 }
@@ -139,6 +162,8 @@ export function descripciones(c: Contexto): Variante[] {
     ...ben.map((b) => `✅ ${b}`),
     ben.length > 0 && '',
     precioLinea(v),
+    ...PAGOS,
+    '',
     `📍 UBICACIÓN: ${ubic(c)}`,
     horario && `⏰ HORARIO: ${horario}`,
     `👨‍💼 ASESOR: ${NOMBRE}`,
@@ -147,7 +172,6 @@ export function descripciones(c: Contexto): Variante[] {
 
   const contactoPrimero = lineas(
     `📍 NORTE DE QUITO | ${NOMBRE} 👨‍💼`,
-    `📲 ${telefono}`,
     '',
     '¡EL MEJOR PRECIO LO CONSIGUES AQUÍ! ‼️✅',
     ...ben.map((b) => `✅ ${mayus(b)}`),
@@ -155,15 +179,17 @@ export function descripciones(c: Contexto): Variante[] {
     `🚗 ${mayus(limpiar(`${vehiculo} ${motorL(v)} ${v.anio}`))}`,
     ...detalles(v, '▪️').slice(1),
     '',
+    ...PAGOS.map(mayus),
+    '',
     `👨‍💼 ${nombre}: Vendedor Autorizado 💯`,
     horario && `⏰ Horario de atención: ${horario}.`,
     `📍 Ubicación: ${ubic(c)}.`,
     `¡No olvides pedir tu cita a nombre de ${NOMBRE} al llegar!`,
+    `📲 ${telefono}`,
   )
 
   const descuento = lineas(
     `📍 ${ubic(c)}`,
-    `👨‍💼 ${nombre}: ${telefono}`,
     '',
     'TODOS LOS PRECIOS CON DESCUENTO ‼️✅',
     '',
@@ -174,7 +200,10 @@ export function descripciones(c: Contexto): Variante[] {
     '',
     ...ben.map((b) => `✅ ${b}`),
     '',
+    ...PAGOS,
+    '',
     `👨‍💼 ${nombre} — Vendedor Autorizado 💯✅`,
+    `📲 ${telefono}`,
   )
 
   const corta = lineas(
@@ -184,10 +213,9 @@ export function descripciones(c: Contexto): Variante[] {
     horario && '',
     `${mayus(limpiar(`${vehiculo} ${v.anio}`))}${v.matricula ? ' PAPELES AL DÍA' : ''} 💯✅`,
     '',
-    v.recibeCambio || ben.some((b) => /parte de pago/i.test(b)) ? 'SÍ REALIZAMOS CAMBIOS / PARTE DE PAGO ‼️' : 'PRECIO CONVERSABLE EN EL PATIO ‼️',
-    `${telefono} 📱`,
+    ...PAGOS.map(mayus),
     '',
-    `SOY ${NOMBRE}.`,
+    `SOY ${NOMBRE}. 📲 ${telefono}`,
   )
 
   const ficha = lineas(
@@ -200,23 +228,25 @@ export function descripciones(c: Contexto): Variante[] {
     ben.length > 0 && '📌 CONDICIONES:',
     ...ben.slice(0, 5).map((b) => `• ${b}`),
     '',
+    ...PAGOS,
+    '',
     `📍 ${ubic(c)}`,
     `📲 ${nombre}: ${telefono}`,
   )
 
   const conversacional = lineas(
     `Hola 👋 Te presento este ${capitalizar(vehiculo)}${v.anio ? ` ${v.anio}` : ''}${v.color ? ` color ${v.color.toLowerCase()}` : ''}.`,
-    `${v.aTodaPrueba ? 'Está a toda prueba y ' : ''}${v.matricula ? 'tiene los papeles al día' : 'está listo para usar'}${equipo.length ? `; además viene con ${equipo.join(' y ')}` : ''}.`,
-    v.recibeCambio && 'Si tienes un auto o moto, lo recibimos como parte de pago 🔄.',
+    `${v.aTodaPrueba ? 'Está a toda prueba y ' : ''}${v.matricula ? v.aTodaPrueba ? 'tiene los papeles al día' : 'Tiene los papeles al día' : v.aTodaPrueba ? 'está listo para usar' : 'Está listo para usar'}${equipo.length ? `; además viene con ${equipo.join(' y ')}` : ''}.`,
     v.negociable && 'El precio es conversable en el patio 🤝.',
     '',
-    `Escríbeme o llámame al 📲 ${telefono} y agenda tu cita.`,
+    ...PAGOS,
+    '',
     `📍 Estamos en ${ubic(c)}.`,
     `${nombre} — Vendedor Autorizado 💯`,
+    `Escríbeme o llámame al 📲 ${telefono} y agenda tu cita.`,
   )
 
   const resumenCorto = detalles(v, '✔️').slice(1, 6)
-  const recibeCambio = v.recibeCambio || ben.some((b) => /parte de pago/i.test(b))
 
   const oportunidad = lineas(
     '🔥 ¡OPORTUNIDAD ÚNICA! 🔥',
@@ -225,16 +255,18 @@ export function descripciones(c: Contexto): Variante[] {
     '',
     ...resumenCorto,
     '',
-    recibeCambio && '🔄 Recibimos tu auto o moto como parte de pago',
-    ...ben.filter((b) => !/parte de pago/i.test(b)).slice(0, 3).map((b) => `✅ ${b}`),
+    ...ben.slice(0, 3).map((b) => `✅ ${b}`),
     '',
-    `📍 ${ubic(c)} | 📲 ${telefono}`,
-    `👉 Escríbeme antes de que se vaya. ${nombre}, Vendedor Autorizado 💯`,
+    ...PAGOS,
+    '',
+    `📍 ${ubic(c)}`,
+    `👉 Escríbeme antes de que se vaya. ${nombre}, Vendedor Autorizado 💯 📲 ${telefono}`,
   )
 
   const fichaEmoji = lineas(
     `🚗 ${mayus(vehiculo)}`,
     '',
+    ...bloque(
     v.anio && `📅 Año: ${v.anio}`,
     v.motor && `⚙️ Motor: ${limpiar(`${motorL(v)} ${v.combustible}`)}`,
     v.transmision && `🕹️ Transmisión: ${v.transmision}`,
@@ -247,9 +279,12 @@ export function descripciones(c: Contexto): Variante[] {
     v.procedencia && `🌎 Procedencia: ${v.procedencia}`,
     v.matricula && `📄 Matrícula: ${v.matricula}${v.ceroMultas ? ' · cero multas' : ''}`,
     v.equipamiento.length > 0 && `⭐ Equipamiento: ${v.equipamiento.join(', ')}`,
-    v.notas && `📝 Estado: ${v.notas}`,
+    notasSinFinanciamiento(v.notas) && `📝 Estado: ${notasSinFinanciamiento(v.notas)}`,
+    ),
     '',
     v.precio && `💰 Precio: $${miles(v.precio)}${sufijoPrecio(v, ' · negociable')}`,
+    ...PAGOS,
+    '',
     `📍 ${ubic(c)}`,
     `📲 ${nombre}: ${telefono}`,
   )
@@ -262,20 +297,24 @@ export function descripciones(c: Contexto): Variante[] {
     '',
     ...ben.slice(0, 3).map((b) => `🤝 ${b}`),
     '',
-    `📲 Escríbeme al ${telefono} y agenda tu cita.`,
+    ...PAGOS,
+    '',
     `📍 ${ubic(c)} · ${nombre}, Vendedor Autorizado 💯`,
+    `📲 Escríbeme al ${telefono} y agenda tu cita.`,
   )
 
   const cambio = lineas(
     '🔄 VENDO O CAMBIO 🔄',
     `${mayus(limpiar(`${vehiculo} ${v.anio}`))}`,
     '',
-    '¿Tienes un auto o moto? ¡Lo recibimos como parte de pago! 🚗🏍️',
+    '¿Tienes un auto o moto? ¡Tráelo! 🚗🏍️',
     '',
     ...resumenCorto,
     '',
     '✅ Trae a tu mecánico de confianza',
     v.negociable && '✅ Precio conversable en el patio',
+    '',
+    ...PAGOS,
     '',
     `📍 ${ubic(c)}`,
     `📲 ${telefono} — ${nombre}`,
@@ -284,6 +323,7 @@ export function descripciones(c: Contexto): Variante[] {
   const minima = lineas(
     limpiar([capitalizar(vehiculo), v.anio, motorL(v), v.transmision, v.matricula].filter(Boolean).join(' · ')),
     v.precio && `💲 $${miles(v.precio)}${sufijoPrecio(v, ' negociable')}`,
+    ...PAGOS,
     `📍 ${ubic(c)}`,
     `📲 ${telefono} · ${nombre}`,
   )
@@ -297,6 +337,8 @@ export function descripciones(c: Contexto): Variante[] {
     ben.some((b) => /garant/i.test(b)) && '🛡️ Garantía incluida.',
     '',
     ...detalles(v, '▫️').slice(1, 8),
+    '',
+    ...PAGOS,
     '',
     `📍 ${ubic(c)}`,
     horario && `⏰ ${horario}`,
@@ -316,7 +358,7 @@ export function descripciones(c: Contexto): Variante[] {
     { id: 'cambio', nombre: 'Vendo o cambio', texto: cambio },
     { id: 'confianza', nombre: 'Compra con confianza', texto: confianza },
     { id: 'minima', nombre: 'Mínima (para repostear)', texto: minima },
-  ].map((d) => ({ ...d, texto: d.texto.replace(/\n{3,}/g, '\n\n').trim() }))
+  ].map((d) => ({ ...d, texto: `${telefono ? `📲 ${nombre}: ${telefono}\n\n` : ''}${d.texto}`.replace(/\n{3,}/g, '\n\n').trim() }))
 }
 
 /** Comentarios y respuestas rápidas para la publicación («¿Sigue disponible?», precio, cambio, cita…). */
@@ -330,7 +372,8 @@ export function comentarios(c: Contexto): Variante[] {
     { id: 'disponible', nombre: 'Sigue disponible', texto: `✅ ¡Sigue disponible! Escríbeme al 📲 ${telefono} y te envío más fotos y detalles del ${vehiculo}.` },
     { id: 'cita', nombre: 'Agendar cita', texto: `Hola 👋 Sí, el ${vehiculo} está disponible. ¿Te gustaría agendar una cita para verlo? Estamos en ${ubic(c)} 📍. Pide la cita a nombre de ${nombre}.` },
     { id: 'precio', nombre: 'Sobre el precio', texto: `💬 El precio${v.precio ? ` de $${miles(v.precio)}` : ''} es conversable en el patio 🤝${conDeuda(v) ? `, considerando los $${dinero(v.deuda)} pendientes de matrícula` : ''}. Escríbeme al 📲 ${telefono} y lo vemos.` },
-    { id: 'cambio', nombre: 'Recibo cambio', texto: `🔄 Sí recibimos tu auto o moto como parte de pago. Mándame fotos y el año de tu vehículo al 📲 ${telefono}.` },
+    { id: 'cambio', nombre: 'Recibo cambio', texto: `🔄 Sí recibimos tu auto o moto como parte de pago (la diferencia es de contado: efectivo o tarjeta). Mándame fotos y el año de tu vehículo al 📲 ${telefono}.` },
+    { id: 'pagos', nombre: '¿Dan financiamiento?', texto: `🚫 No damos financiamiento. 💵 La venta es solo de contado: efectivo o tarjeta, y 🔄 recibimos tu auto o moto como parte de pago. Escríbeme al 📲 ${telefono}.` },
     { id: 'papeles', nombre: 'Papeles y mecánico', texto: `📄 ${v.matricula ? `Tiene la matrícula ${v.matricula.toLowerCase()}${v.ceroMultas ? ' y cero multas' : ''}. ` : ''}Puedes traer a tu mecánico de confianza 🔧.` },
     { id: 'horario', nombre: 'Horario y ubicación', texto: horario ? `⏰ Atendemos ${horario.charAt(0).toLowerCase() + horario.slice(1)}. Te espero en ${ubic(c)} 📍 — ${nombre}` : `📍 Te espero en ${ubic(c)}. Escríbeme para coordinar la visita 📲 ${telefono} — ${nombre}` },
     { id: 'subir', nombre: 'Para subir la publicación', texto: `⬆️ ¡Disponible! ${limpiar(`${vehiculo} ${v.anio}`)} 💯 Escríbeme 📲 ${telefono}` },
