@@ -215,3 +215,20 @@ textarea.entrada { font-size: 1.05rem; }
 /* Varias placas: avance de la consulta por lotes */
 .lote { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; font-size: .95rem; }
 .lote li { line-height: 1.4; }
+
+/* Campo de placa: sugerencias del historial (placa a la izquierda, vehículo a la derecha) */
+.campo.placa { position: relative; }
+.placa-fila { display: flex; align-items: center; gap: .7rem; flex-wrap: wrap; }
+.placa-caja { flex: 0 1 220px; min-width: 150px; }
+.placa-conocida { flex: 1 1 150px; min-width: 0; color: var(--texto-2); font-size: .92rem; }
+.placa-conocida strong { color: var(--texto); }
+.sugerencias { list-style: none; margin: 0; padding: .3rem; border: 1px solid var(--borde); border-radius: 12px; background: var(--superficie); box-shadow: 0 6px 20px rgb(16 24 40 / 16%); max-height: 50dvh; overflow-y: auto; max-width: 620px; }
+.sugerencias li[role='option'] { display: flex; align-items: center; gap: .7rem; padding: .5rem; min-height: 44px; border-radius: 8px; cursor: pointer; }
+.sugerencias li.activa, .sugerencias li[role='option']:hover { background: var(--primario-claro); }
+.sugerencias .chapa { flex: none; }
+.sugerencias mark { background: var(--acento); color: #111827; border-radius: 3px; }
+.sugerencias .vehiculo { flex: 1; min-width: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.sugerencias .vehiculo.vacio { font-weight: 400; font-style: italic; color: var(--texto-2); padding: 0; }
+.sugerencias small { flex: none; color: var(--texto-2); }
+.sugerencias-nota { color: var(--texto-2); font-size: .85rem; padding: .3rem .5rem; }
+@media (max-width: 480px) { .sugerencias small { display: none; } }

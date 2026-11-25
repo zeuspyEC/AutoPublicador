@@ -5,6 +5,8 @@ import { VEHICULO_VACIO, type Ajustes as TAjustes, type Origen, type Origenes, t
 import { almacen, type PlacaConsultada, type Publicacion } from './servicios/almacen'
 import { investigarGoogle, investigarTextoPegado, investigarWikipedia, type Hallazgo, type Investigacion } from './servicios/investigador'
 import { consultarSri, ErrorPlaca, interpretarPegado, interpretarSri, normalizarPlaca, placaValida, resumenDePlaca, SERVIDOR_PLACAS } from './servicios/placa'
+import { CampoPlaca } from './componentes/CampoPlaca'
+import { placasConocidas, type PlacaConocida } from './dominio/sugerencias'
 import { Ajustes } from './componentes/Ajustes'
 import { FormPerfil } from './componentes/FormPerfil'
 import { FormVehiculo } from './componentes/FormVehiculo'
@@ -56,6 +58,7 @@ export default function App() {
   const titulos = useMemo(() => (ctx ? generarTitulos(ctx) : []), [ctx])
   const descripciones = useMemo(() => (ctx ? generarDescripciones(ctx) : []), [ctx])
   const comentarios = useMemo(() => (ctx ? generarComentarios(ctx) : []), [ctx])
+  const conocidas = useMemo(() => placasConocidas(placas, historial), [placas, historial])
   const placaNormal = normalizarPlaca(placa)
   const placaOk = !placa.trim() || placaValida(placaNormal)
 
@@ -113,12 +116,14 @@ export default function App() {
     setSri({ estado: 'buscando' })
     try {
       const { base, rubros, pagos, registrada, componentes, detallesPago, resumenPagos, impuestoAmbiental } = await consultarSri(p, fetch, 15000, ajustes.servidorPlacas || SERVIDOR_PLACAS)
-      if (n !== ronda.current) return
       const r = interpretarSri(p, base, rubros, pagos, registrada || p, { componentes, detallesPago, resumenPagos, impuestoAmbiental })
+      registrarPlaca(p, r) // se recuerda aunque el vendedor ya esté con otro vehículo
+      if (n !== ronda.current) return
       setSri({ estado: 'listo', resultado: r })
       completarCon(r, 'sri')
-      registrarPlaca(p, r)
     } catch (e) {
+      almacen.guardarPlacaSinRespuesta(p, (e as Error).message)
+      setPlacas(almacen.placas())
       if (n === ronda.current) setSri({ estado: 'error', error: (e as Error).message, sinAcceso: e instanceof ErrorPlaca && e.tipo === 'sin-acceso' })
     }
   }
@@ -145,11 +150,20 @@ export default function App() {
     setPlacas(almacen.placas())
   }
 
+  /** Sugerencia elegida en el campo de placa: carga lo guardado al instante; si no tuvo respuesta, solo completa la placa. */
+  function elegirSugerencia(s: PlacaConocida) {
+    if (s.consultada) usarPlaca(s.consultada, texto)
+    else if (s.publicacion && s.vehiculo && !texto.trim()) abrir(s.publicacion)
+    else setPlaca(s.placa)
+  }
+
   /** Nueva publicación con una placa del historial: usa los datos guardados, sin volver a consultar el SRI. */
-  function usarPlaca(p: PlacaConsultada) {
+  function usarPlaca(p: PlacaConsultada, descripcion = '') {
+    if (p.sinRespuesta) { nuevo(); setPlaca(p.placa); setVista('crear'); return }
     const n = ++ronda.current
-    vActual.current = VEHICULO_VACIO
-    setTexto(''); setPlaca(p.placa); setPlacaConsultada(p.placa); setCorrecciones([]); setDiferencias([]); setOrigenes({}); origenesActuales.current = {}; setV(VEHICULO_VACIO)
+    const a = descripcion.trim() ? analizar(descripcion) : { vehiculo: VEHICULO_VACIO, origenes: {} as Origenes, correcciones: [] }
+    vActual.current = a.vehiculo
+    setTexto(descripcion); setPlaca(p.placa); setPlacaConsultada(p.placa); setCorrecciones(a.correcciones); setDiferencias([]); setOrigenes(a.origenes); origenesActuales.current = a.origenes; setV(a.vehiculo)
     setGoogle({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' }); setWiki({ estado: 'inactivo' })
     setSri({ estado: 'listo', resultado: p.resultado })
     completarCon(p.resultado, 'sri')
@@ -201,7 +215,7 @@ export default function App() {
     ronda.current++
     setTexto(p.texto); setV({ ...VEHICULO_VACIO, ...p.vehiculo }); setOrigenes(p.origenes); setGenerado(true); setIdPublicacion(p.id)
     setWiki({ estado: 'inactivo' }); setGoogle({ estado: 'inactivo' }); setSri({ estado: 'inactivo' }); setPegado({ estado: 'inactivo' })
-    setPlaca(''); setPlacaConsultada(''); setCorrecciones([]); setDiferencias([]); setVista('crear')
+    setPlaca(p.placa ?? ''); setPlacaConsultada(p.placa ?? ''); setCorrecciones([]); setDiferencias([]); setVista('crear')
   }
 
   if (!perfil) {
@@ -255,11 +269,7 @@ export default function App() {
               <p className="ayuda">Lo importante para identificarlo: marca, modelo, año, motor, transmisión, precio y lo que lo hace atractivo.</p>
               <textarea className="entrada" rows={4} value={texto} onChange={(e) => setTexto(e.target.value)}
                 placeholder="Ej.: Kia Rio 1.4 2016 manual, 85.000 km, aire, pantalla, matrícula 2025, $11.500 negociable" />
-              <label className="campo placa">
-                <span>Placa (opcional): trae del SRI marca, modelo, año, motor, procedencia, matrícula y valores pendientes</span>
-                <input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())} placeholder="PBA1234" maxLength={9} autoCapitalize="characters" autoComplete="off" />
-                {!placaOk && <small className="error">Placa no válida: 3 letras y 3 o 4 números (autos) o 2 letras, 3 números y 1 letra (motos).</small>}
-              </label>
+              <CampoPlaca placa={placa} valida={placaOk} conocidas={conocidas} cambiar={setPlaca} elegir={elegirSugerencia} />
               <div className="fila">
                 <button type="button" className="boton principal grande" disabled={(!texto.trim() && !placa.trim()) || !placaOk} onClick={generar}>Generar publicación ✨</button>
                 {generado && <button type="button" className="boton secundario" onClick={nuevo}>Nuevo vehículo</button>}

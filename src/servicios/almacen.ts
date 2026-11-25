@@ -20,6 +20,7 @@ export interface PlacaConsultada {
   fecha: string
   resumen: string // «Chevrolet Aveo Family 2015 · Plateado»
   resultado: Investigacion
+  sinRespuesta?: string // motivo: el SRI no devolvió datos (placa mal digitada, inexistente o sin conexión)
 }
 
 const CLAVES = { perfil: 'ap.perfil', ajustes: 'ap.ajustes', historial: 'ap.historial', borrador: 'ap.borrador', placas: 'ap.placas' }
@@ -50,6 +51,11 @@ export const almacen = {
 
   placas: () => leer<PlacaConsultada[]>(CLAVES.placas) ?? [],
   guardarPlaca: (p: PlacaConsultada) => escribir(CLAVES.placas, [p, ...almacen.placas().filter((x) => x.placa !== p.placa)].slice(0, 300)),
+  /** Placa sin respuesta: se recuerda vacía, sin pisar nunca los datos que ya se hubieran obtenido. */
+  guardarPlacaSinRespuesta: (placa: string, motivo: string) => {
+    if (almacen.placas().some((x) => x.placa === placa && !x.sinRespuesta)) return
+    almacen.guardarPlaca({ placa, fecha: new Date().toISOString(), resumen: '', sinRespuesta: motivo, resultado: { resumen: '', hallazgos: [], avisos: [], fuentes: [] } })
+  },
   borrarPlaca: (placa: string) => escribir(CLAVES.placas, almacen.placas().filter((x) => x.placa !== placa)),
 
   borrador: () => leer<{ texto: string; vehiculo: Vehiculo; origenes: Origenes }>(CLAVES.borrador),

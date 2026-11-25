@@ -50,12 +50,13 @@ export function Historial({ lista, placas, abrir, borrar, usarPlaca, borrarPlaca
           {placas.map((p) => (
             <li key={p.placa} className="tarjeta">
               <div className="cabecera-historial">
-                <strong><span className="chapa">{p.placa}</span> {p.resumen}</strong>
+                <strong><span className="chapa">{p.placa}</span> {p.resumen || <em className="vacio">Sin datos</em>}</strong>
                 <small>{fecha(p.fecha)}</small>
               </div>
+              {p.sinRespuesta && <p className="aviso">Sin respuesta: {p.sinRespuesta}</p>}
               {p.resultado.avisos.map((a) => <p key={a} className="aviso">{a}</p>)}
               <div className="fila">
-                <button type="button" className="boton secundario" onClick={() => usarPlaca(p)}>Crear publicación con esta placa</button>
+                <button type="button" className="boton secundario" onClick={() => usarPlaca(p)}>{p.sinRespuesta ? 'Corregir o volver a consultar' : 'Crear publicación con esta placa'}</button>
                 <button type="button" className="icono" title="Eliminar" onClick={() => { if (confirm(`¿Eliminar la placa ${p.placa} del historial?`)) borrarPlaca(p.placa) }}>🗑</button>
               </div>
             </li>

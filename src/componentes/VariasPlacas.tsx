@@ -23,6 +23,9 @@ export function VariasPlacas({ perfil, ajustes, alGuardar }: Props) {
         almacen.guardarEnHistorial(r.publicacion)
         almacen.guardarPlaca(r.placaConsultada)
         alGuardar()
+      } else if (!r.ok) {
+        almacen.guardarPlacaSinRespuesta(r.placa, r.error ?? 'Sin respuesta')
+        alGuardar()
       }
       setResultados((x) => [...x, r])
     })
