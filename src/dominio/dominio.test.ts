@@ -4,7 +4,7 @@ import { comentarios, descripciones, titulos } from './plantillas'
 import { formatearTelefono, normalizarTelefono, telefonoValido, tieneNumeroLimpio } from './telefono'
 import { BENEFICIOS_PREDETERMINADOS, type Perfil } from './tipos'
 
-const perfil: Perfil = { nombre: 'Erick Costa', telefono: '0987654321', estiloTelefono: 'guiones', horario: 'Todos los días de 08:30 a 17:30' }
+const perfil: Perfil = { nombre: 'Juan Pérez', telefono: '0987654321', estiloTelefono: 'guiones', horario: 'Todos los días de 08:30 a 17:30' }
 
 describe('teléfono a prueba de Facebook', () => {
   it('normaliza +593 y 593 al formato nacional', () => {
@@ -100,7 +100,7 @@ describe('plantillas', () => {
     for (const d of descripciones(ctx)) {
       expect(d.texto, d.id).toContain('0987--654--321')
       expect(tieneNumeroLimpio(d.texto), d.id).toBe(false)
-      expect(d.texto, d.id).toMatch(/Erick Costa|ERICK COSTA/)
+      expect(d.texto, d.id).toMatch(/Juan Pérez|JUAN PÉREZ/)
       expect(d.texto, d.id).toMatch(/Inca|INCA/)
       expect(d.texto, d.id).not.toMatch(/undefined|null|\n{3,}/)
     }
@@ -150,7 +150,7 @@ describe('corrección de errores de tipeo y valores de carrocería', () => {
 })
 
 describe('más variaciones: descripciones, títulos condicionales y comentarios', () => {
-  const perfilT: Perfil = { nombre: 'Erick Costa', telefono: '0987654321', estiloTelefono: 'puntos', horario: 'Todos los días de 08:30 a 17:30' }
+  const perfilT: Perfil = { nombre: 'Juan Pérez', telefono: '0987654321', estiloTelefono: 'puntos', horario: 'Todos los días de 08:30 a 17:30' }
   const base = analizar('Toyota Hilux 2.5 2014 diésel 4x4 cabina doble 145.000 km, único dueño, matrícula 2025, $28500 negociable, recibo carro o moto').vehiculo
   const ctx = { v: { ...base, carroceria: 'Camioneta' }, perfil: perfilT, beneficios: BENEFICIOS_PREDETERMINADOS }
 

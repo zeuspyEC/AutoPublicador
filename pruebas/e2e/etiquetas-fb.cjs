@@ -38,7 +38,7 @@ const { abrirApp, navegador, clic, SALIDA } = require('./comun.cjs')
     const h = await copiado(); exigir(/corsa 2005/.test(h) && !/negociable/.test(h), 'el historial copia las etiquetas al día')
     await clic(p, 'nav button', 'Crear'); await espera(300)
     await p.$eval('.etiquetas-fb', (x) => x.scrollIntoView()); await espera(300); await p.screenshot({ path: path.join(SALIDA, 'etiquetas-fb.png') })
-    exigir(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'sin desplazamiento horizontal en el celular')
+    exigir(await p.evaluate(() => Math.max(document.documentElement.scrollWidth, innerWidth) <= 391), 'sin desplazamiento horizontal en el celular')
     exigir(!errores.length, 'sin errores ' + errores.join('|'))
   } catch (err) { fallos.push(err.message); console.log(err) }
   await b.close(); app.cerrar?.()

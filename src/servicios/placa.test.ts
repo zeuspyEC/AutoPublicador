@@ -107,7 +107,7 @@ describe('placa: motos, diagnóstico y resumen', () => {
   })
   it('moto en las plantillas: «149 cc» (no «149 ccL») y frase para moto', () => {
     const v = { ...analizar('yamaha fz 2021').vehiculo, motor: '149 cc', carroceria: 'Moto' }
-    const ctx = { v, perfil: { nombre: 'Erick Costa', telefono: '0987654321', estiloTelefono: 'guiones' as const, horario: '' }, beneficios: BENEFICIOS_PREDETERMINADOS }
+    const ctx = { v, perfil: { nombre: 'Juan Pérez', telefono: '0987654321', estiloTelefono: 'guiones' as const, horario: '' }, beneficios: BENEFICIOS_PREDETERMINADOS }
     expect(titulos(ctx)[0].texto).toContain('149 cc')
     expect(titulos(ctx)[0].texto).not.toContain('ccL')
     expect(descripciones(ctx)[0].texto).toContain('moverse ágil y económico por la ciudad')

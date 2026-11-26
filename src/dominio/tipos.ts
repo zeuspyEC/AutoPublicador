@@ -55,7 +55,15 @@ export interface Ajustes {
   servidorPlacas: string // opcional: URL del servidor de placas propio (carpeta /servidor); vacío = el predeterminado
   ubicacion: string
   etiquetas: string[] // etiquetas propias creadas por el vendedor, disponibles para todos los vehículos
+  tema: Tema // apariencia: la del teléfono, clara u oscura
+  letra: 'normal' | 'grande'
+  respuestas: RespuestaPropia[] // respuestas rápidas escritas por el vendedor
 }
+
+export type Tema = 'sistema' | 'claro' | 'oscuro'
+
+/** Respuesta rápida propia: {vehiculo}, {precio}, {telefono}, {nombre} y {ubicacion} se reemplazan con los datos actuales. */
+export interface RespuestaPropia { id: string; nombre: string; texto: string }
 
 export const VEHICULO_VACIO: Vehiculo = {
   marca: '', modelo: '', version: '', anio: '', motor: '', transmision: '', combustible: '', kilometraje: '',

@@ -23,7 +23,7 @@ export function FormPerfil({ inicial, alGuardar, textoBoton, enVivo = false }: {
     >
       <label className="campo">
         <span>Tu nombre (así aparecerá en las publicaciones)</span>
-        <input value={p.nombre} onChange={(e) => setP({ ...p, nombre: e.target.value })} placeholder="Ej.: Erick Costa" autoComplete="name" />
+        <input value={p.nombre} onChange={(e) => setP({ ...p, nombre: e.target.value })} placeholder="Ej.: Juan Pérez" autoComplete="name" />
         {tocado && !nombreOk && <small className="error">Escribe tu nombre.</small>}
       </label>
       <label className="campo">

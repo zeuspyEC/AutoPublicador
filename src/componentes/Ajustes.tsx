@@ -3,6 +3,7 @@ import { BENEFICIOS_PREDETERMINADOS, UBICACION_PREDETERMINADA, type Ajustes as T
 import { diagnosticar, olvidarModelos, type Diagnostico } from '../servicios/google'
 import { SERVIDOR_PLACAS } from '../servicios/placa'
 import { FormPerfil } from './FormPerfil'
+import { Apariencia, RespuestasPropias, Respaldo } from './AjustesExtra'
 
 interface Props {
   perfil: Perfil
@@ -10,9 +11,10 @@ interface Props {
   guardarPerfil: (p: Perfil) => void
   guardarAjustes: (a: TAjustes) => void
   borrarTodo: () => void
+  restaurado: () => void // vuelve a leer todo lo guardado después de restaurar un respaldo
 }
 
-export function Ajustes({ perfil, ajustes, guardarPerfil, guardarAjustes, borrarTodo }: Props) {
+export function Ajustes({ perfil, ajustes, guardarPerfil, guardarAjustes, borrarTodo, restaurado }: Props) {
   const [nuevo, setNuevo] = useState('')
   const [clave, setClave] = useState(ajustes.claveGemini)
   const [probando, setProbando] = useState(false)
@@ -23,6 +25,8 @@ export function Ajustes({ perfil, ajustes, guardarPerfil, guardarAjustes, borrar
 
   return (
     <div className="ajustes">
+      <Apariencia ajustes={ajustes} set={set} />
+
       <section className="tarjeta">
         <h2>Tu perfil</h2>
         <FormPerfil inicial={perfil} textoBoton="Guardar perfil" enVivo alGuardar={guardarPerfil} />
@@ -62,6 +66,8 @@ export function Ajustes({ perfil, ajustes, guardarPerfil, guardarAjustes, borrar
         </form>
         <button type="button" className="enlace" onClick={() => set({ beneficios: BENEFICIOS_PREDETERMINADOS })}>Restaurar los beneficios originales</button>
       </section>
+
+      <RespuestasPropias ajustes={ajustes} set={set} />
 
       <section className="tarjeta">
         <h2>Búsqueda en Google (opcional)</h2>
@@ -117,7 +123,7 @@ export function Ajustes({ perfil, ajustes, guardarPerfil, guardarAjustes, borrar
           directo y, si no puede, ofrece la consulta manual.
         </p>
         <form className="fila" onSubmit={(e) => { e.preventDefault(); setServidorOk(''); set({ servidorPlacas: servidor.trim().replace(/\/+$/, '') }) }}>
-          <input value={servidor} onChange={(e) => setServidor(e.target.value)} placeholder={SERVIDOR_PLACAS || 'https://autopublicador-placas.TU-CUENTA.workers.dev'} inputMode="url" autoComplete="off" />
+          <input value={servidor} onChange={(e) => setServidor(e.target.value)} placeholder={SERVIDOR_PLACAS ? 'Vacío = servidor de la app' : 'https://…workers.dev'} inputMode="url" autoComplete="off" />
           <button className="boton secundario" type="submit">Guardar</button>
         </form>
         <div className="fila">
@@ -133,6 +139,8 @@ export function Ajustes({ perfil, ajustes, guardarPerfil, guardarAjustes, borrar
           {servidorOk && <span>{servidorOk}</span>}
         </div>
       </section>
+
+      <Respaldo restaurado={restaurado} />
 
       <section className="tarjeta peligro">
         <h2>Datos de este dispositivo</h2>

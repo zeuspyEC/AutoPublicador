@@ -9,6 +9,16 @@
     <meta name="theme-color" content="#1e3a8a" />
     <meta name="description" content="Escribe los datos de un carro y obtén títulos y descripciones listos para Facebook Marketplace." />
     <title>AutoPublicador</title>
+    <script>
+      // Tema y tamaño de letra guardados, aplicados antes de pintar la página (sin destello blanco en modo oscuro)
+      try {
+        var a = JSON.parse(localStorage.getItem('ap.ajustes') || '{}'), r = document.documentElement
+        if (a.tema === 'claro' || a.tema === 'oscuro') r.dataset.tema = a.tema
+        if (a.letra === 'grande') r.dataset.letra = 'grande'
+        var oscuro = a.tema === 'oscuro' || (a.tema !== 'claro' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', oscuro ? '#0b1020' : '#1e3a8a')
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

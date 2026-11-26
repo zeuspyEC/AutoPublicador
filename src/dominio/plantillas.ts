@@ -4,7 +4,7 @@
 import { formatearTelefono } from './telefono'
 import { aplicarCambios, type Seleccion } from './retoques'
 import { beneficiosCoherentes, contradice, faltanEn, notasCoherentes, propias, vigentes } from './etiquetas'
-import { UBICACION_PREDETERMINADA, type Beneficio, type Perfil, type Vehiculo } from './tipos'
+import { UBICACION_PREDETERMINADA, type Beneficio, type Perfil, type RespuestaPropia, type Vehiculo } from './tipos'
 
 export interface Variante {
   id: string
@@ -17,6 +17,7 @@ export interface Contexto {
   perfil: Perfil
   beneficios: Beneficio[]
   ubicacion?: string
+  respuestas?: RespuestaPropia[] // respuestas rápidas escritas por el vendedor
 }
 
 /** Límite práctico del título en Marketplace: lo que pasa de aquí se corta en la vista previa. */
@@ -417,5 +418,26 @@ export function comentarios(c: Contexto): Variante[] {
     { id: 'horario', nombre: 'Horario y ubicación', texto: horario ? `⏰ Atendemos ${horario.charAt(0).toLowerCase() + horario.slice(1)}. Te espero en ${ubic(c)} 📍 — ${nombre}` : `📍 Te espero en ${ubic(c)}. Escríbeme para coordinar la visita 📲 ${telefono} — ${nombre}` },
     { id: 'subir', nombre: 'Para subir la publicación', texto: `⬆️ ¡Disponible! ${limpiar(`${vehiculo} ${v.anio}`)} 💯 Escríbeme 📲 ${telefono}` },
   ]
-  return lista.filter(Boolean) as Variante[]
+  const mias = (c.respuestas ?? []).filter((r) => r.texto.trim()).map((r) => ({ id: 'propia-' + r.id, nombre: r.nombre.trim() || 'Mi respuesta', texto: rellenarRespuesta(c, r.texto) }))
+  return [...(lista.filter(Boolean) as Variante[]), ...mias]
+}
+
+/** Campos que se pueden usar en las respuestas propias. */
+export const CAMPOS_RESPUESTA = ['vehiculo', 'precio', 'telefono', 'nombre', 'ubicacion', 'horario'] as const
+
+/** Reemplaza {vehiculo}, {precio}, {telefono}, {nombre}, {ubicacion} y {horario} con los datos actuales (sin importar tildes ni mayúsculas). */
+export function rellenarRespuesta(c: Contexto, texto: string): string {
+  const v = c.v
+  const valores: Record<string, string> = {
+    vehiculo: limpiar(`${capitalizar(nombreVehiculo(v))} ${v.anio}`) || 'vehículo',
+    precio: v.precio ? `$${miles(v.precio)}` : '',
+    telefono: tel(c),
+    nombre: c.perfil.nombre.trim(),
+    ubicacion: ubic(c),
+    horario: c.perfil.horario.trim(),
+  }
+  return texto.replace(/\{\s*(\p{L}+)\s*\}/gu, (m, k: string) => {
+    const clave = k.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+    return clave in valores ? valores[clave] : m
+  }).replace(/[ \t]{2,}/g, ' ').trim()
 }

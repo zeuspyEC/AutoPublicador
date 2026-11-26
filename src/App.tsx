@@ -18,8 +18,14 @@ import { migrar } from './dominio/etiquetas'
 import { Respuestas } from './componentes/Respuestas'
 import { etiquetasMarketplace } from './dominio/marketplace'
 import { Resultados } from './componentes/Resultados'
+import { aplicarApariencia, seguirAlSistema } from './servicios/tema'
 
 type Vista = 'crear' | 'historial' | 'ajustes' | 'respuestas'
+const VISTAS: Vista[] = ['crear', 'historial', 'ajustes', 'respuestas']
+/** La pestaña abierta se recuerda al recargar (o al volver a la app). */
+const vistaGuardada = (): Vista => { try { const x = localStorage.getItem('ap.vista') as Vista; return VISTAS.includes(x) ? x : 'crear' } catch { return 'crear' } }
+
+interface AvisoFlotante { texto: string; deshacer?: () => void }
 
 const IMPORTANTES: (keyof Vehiculo)[] = ['marca', 'modelo', 'anio', 'motor', 'transmision', 'precio']
 const NOMBRE_CAMPO: Partial<Record<keyof Vehiculo, string>> = { marca: 'marca', modelo: 'modelo', version: 'versión', puertas: 'puertas', anio: 'año', motor: 'motor', transmision: 'transmisión', precio: 'precio', color: 'color', procedencia: 'procedencia', matricula: 'matrícula', carroceria: 'carrocería' }
@@ -33,7 +39,10 @@ const EJEMPLOS = [
 export default function App() {
   const [perfil, setPerfil] = useState<Perfil | null>(() => almacen.perfil())
   const [ajustes, setAjustes] = useState<TAjustes>(() => almacen.ajustes())
-  const [vista, setVista] = useState<Vista>('crear')
+  const [vista, setVista] = useState<Vista>(vistaGuardada)
+  const [aviso, setAviso] = useState<AvisoFlotante | null>(null)
+  const [enLinea, setEnLinea] = useState(() => navigator.onLine)
+  const [abajo, setAbajo] = useState(false)
   const borrador = useMemo(() => almacen.borrador(), [])
   const [texto, setTexto] = useState(borrador?.texto ?? '')
   const [v, setV] = useState<Vehiculo>(() => migrar(borrador?.vehiculo, VEHICULO_VACIO, (c) => borrador?.origenes?.[c] === 'manual')) // completa borradores antiguos
@@ -57,6 +66,18 @@ export default function App() {
   const vActual = useRef(v)
   vActual.current = v
   const resultadosRef = useRef<HTMLElement>(null)
+
+  // Apariencia: tema y letra al instante; con «Automático» sigue al teléfono si cambia de modo
+  useEffect(() => { aplicarApariencia(ajustes); return seguirAlSistema(() => aplicarApariencia(ajustes)) }, [ajustes.tema, ajustes.letra]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { try { localStorage.setItem('ap.vista', vista) } catch { /* nada */ } }, [vista])
+  useEffect(() => {
+    const cambio = () => setEnLinea(navigator.onLine)
+    const desplazar = () => setAbajo(window.scrollY > 900)
+    window.addEventListener('online', cambio); window.addEventListener('offline', cambio); window.addEventListener('scroll', desplazar, { passive: true })
+    return () => { window.removeEventListener('online', cambio); window.removeEventListener('offline', cambio); window.removeEventListener('scroll', desplazar) }
+  }, [])
+  // El aviso flotante se va solo (con tiempo suficiente para «Deshacer»)
+  useEffect(() => { if (!aviso) return; const t = setTimeout(() => setAviso(null), 6000); return () => clearTimeout(t) }, [aviso])
 
   useEffect(() => { almacen.guardarBorrador({ texto, vehiculo: v, origenes, id: idPublicacion, placa: placaConsultada, seleccion }) }, [texto, v, origenes, idPublicacion, placaConsultada, seleccion])
 
@@ -119,7 +140,7 @@ export default function App() {
   }
 
   const faltantes = IMPORTANTES.filter((k) => !v[k])
-  const ctx = useMemo(() => (perfil ? { v, perfil, beneficios: ajustes.beneficios, ubicacion: ajustes.ubicacion } : null), [v, perfil, ajustes])
+  const ctx = useMemo(() => (perfil ? { v, perfil, beneficios: ajustes.beneficios, ubicacion: ajustes.ubicacion, respuestas: ajustes.respuestas } : null), [v, perfil, ajustes])
   const titulos = useMemo(() => (ctx ? generarTitulos(ctx) : []), [ctx])
   const descripciones = useMemo(() => (ctx ? generarDescripciones(ctx) : []), [ctx])
   const etiquetasFB = useMemo(() => etiquetasMarketplace(v, ajustes.ubicacion), [v, ajustes.ubicacion])
@@ -289,6 +310,38 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  /** Empezar otro vehículo: si la publicación en pantalla no está guardada, se puede deshacer. */
+  function nuevoConAviso() {
+    if (!guardada && generado) {
+      const antes = { texto, v, origenes, placa, placaConsultada, seleccion, id: idPublicacion }
+      nuevo()
+      setAviso({ texto: 'Se empezó un vehículo nuevo.', deshacer: () => {
+        textoGenerado.current = antes.texto
+        setTexto(antes.texto); setV(antes.v); setOrigenes(antes.origenes); setPlaca(antes.placa); setPlacaConsultada(antes.placaConsultada)
+        setSeleccion(antes.seleccion); setIdPublicacion(antes.id); setGenerado(true)
+      } })
+    } else nuevo()
+  }
+
+  /** Nueva publicación con los mismos datos de otra (p. ej., otro carro igual o para publicarla otra vez). */
+  function duplicar(p: Publicacion) {
+    abrir({ ...p, id: crypto.randomUUID(), estado: undefined })
+    setAviso({ texto: 'Copia lista para editar. Guárdala cuando esté lista.' })
+    window.scrollTo({ top: 0 })
+  }
+
+  function borrarPublicacion(id: string) {
+    const antes = almacen.historial()
+    almacen.borrarDeHistorial(id); setHistorial(almacen.historial())
+    setAviso({ texto: 'Publicación eliminada.', deshacer: () => { almacen.reponerHistorial(antes); setHistorial(almacen.historial()) } })
+  }
+
+  function borrarPlacaConAviso(pl: string) {
+    const antes = almacen.placas()
+    almacen.borrarPlaca(pl); setPlacas(almacen.placas())
+    setAviso({ texto: `Placa ${pl} eliminada.`, deshacer: () => { almacen.reponerPlacas(antes); setPlacas(almacen.placas()) } })
+  }
+
   function abrir(p: Publicacion) {
     ronda.current++
     textoGenerado.current = p.texto
@@ -327,13 +380,15 @@ export default function App() {
           ))}
         </nav>
       </header>
+      {!enLinea && <div className="sin-conexion" role="status">📴 Sin conexión: puedes editar y copiar; la placa y la investigación necesitan internet.</div>}
 
       <main className="contenido">
         {vista === 'ajustes' && (
           <Ajustes perfil={perfil} ajustes={ajustes}
             guardarPerfil={(p) => { almacen.guardarPerfil(p); setPerfil(p) }}
             guardarAjustes={(a) => { almacen.guardarAjustes(a); setAjustes(a) }}
-            borrarTodo={() => { almacen.borrarTodo(); location.reload() }} />
+            borrarTodo={() => { almacen.borrarTodo(); location.reload() }}
+            restaurado={() => { setHistorial(almacen.historial()); setPlacas(almacen.placas()); setAjustes(almacen.ajustes()); setPerfil(almacen.perfil()) }} />
         )}
 
         {vista === 'respuestas' && (
@@ -341,10 +396,10 @@ export default function App() {
         )}
 
         {vista === 'historial' && (
-          <Historial lista={historial} placas={placas} abrir={abrir} usarPlaca={usarPlaca}
+          <Historial lista={historial} placas={placas} abrir={abrir} usarPlaca={usarPlaca} duplicar={duplicar}
+            cambiarEstado={(id, e) => { almacen.cambiarEstado(id, e); setHistorial(almacen.historial()) }}
             perfil={perfil} ajustes={ajustes} refrescar={() => { setHistorial(almacen.historial()); setPlacas(almacen.placas()) }}
-            borrar={(id) => { almacen.borrarDeHistorial(id); setHistorial(almacen.historial()) }}
-            borrarPlaca={(pl) => { almacen.borrarPlaca(pl); setPlacas(almacen.placas()) }} />
+            borrar={borrarPublicacion} borrarPlaca={borrarPlacaConAviso} />
         )}
 
         {vista === 'crear' && (
@@ -357,7 +412,7 @@ export default function App() {
               <CampoPlaca placa={placa} valida={placaOk} conocidas={conocidas} cambiar={setPlaca} elegir={elegirSugerencia} />
               <div className="fila">
                 <button type="button" className="boton principal grande" disabled={(!texto.trim() && !placa.trim()) || !placaOk} onClick={generar}>Generar publicación ✨</button>
-                {generado && <button type="button" className="boton secundario" onClick={nuevo}>Nuevo vehículo</button>}
+                {generado && <button type="button" className="boton secundario" onClick={nuevoConAviso}>Nuevo vehículo</button>}
               </div>
               {!texto && (
                 <div className="ejemplos">
@@ -404,6 +459,13 @@ export default function App() {
           </>
         )}
       </main>
+      {abajo && !aviso && <button type="button" className="ir-arriba" aria-label="Ir arriba" title="Ir arriba" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>↑</button>}
+      {aviso && (
+        <div className="aviso-flotante" role="status">
+          <span>{aviso.texto}</span>
+          {aviso.deshacer && <button type="button" onClick={() => { aviso.deshacer!(); setAviso(null) }}>Deshacer</button>}
+        </div>
+      )}
       <footer className="pie">Datos guardados solo en este dispositivo · AutoPublicador v{__VERSION__}</footer>
     </>
   )

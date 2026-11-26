@@ -48,7 +48,7 @@ const { abrirApp, navegador, clic, SALIDA } = require('./comun.cjs')
     await p.evaluate(() => scrollTo(0, 1e6)); await espera(300); await p.screenshot({ path: path.join(SALIDA, 'final.png') })
     exigir(await p.evaluate(() => { const c = [...document.querySelectorAll('button')].find((x) => /Copiar descripción/.test(x.textContent)); return c.getBoundingClientRect().top < innerHeight }), 'al final está la descripción')
     await vista('Respuestas'); await p.screenshot({ path: path.join(SALIDA, 'respuestas.png') })
-    exigir(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'sin desborde horizontal')
+    exigir(await p.evaluate(() => Math.max(document.documentElement.scrollWidth, innerWidth) <= 391), 'sin desborde horizontal')
     exigir(await p.evaluate(() => [...document.querySelectorAll('nav button')].at(-1).textContent === 'Respuestas' && [...document.querySelectorAll('nav button')].at(-1).getBoundingClientRect().right <= innerWidth + 1), 'Respuestas a la derecha y visible')
     exigir(!errores.length, 'sin errores de consola ' + errores.join(' | '))
   } catch (e) { fallos.push(e.message); console.log(e) }

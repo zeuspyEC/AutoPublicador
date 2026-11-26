@@ -46,6 +46,11 @@ Fuera de alcance por ahora: fotos (no hay almacenamiento), respuestas a clientes
 | RF19 | **La placa manda**: con placa, los datos de identidad del SRI (marca, modelo, año, motor, color, procedencia, matrícula, clase) reemplazan lo escrito en el texto; se muestran las diferencias y se puede volver al texto. Wikipedia y Google investigan el modelo que registra el SRI. | ✅ |
 | RF20 | **Servidor de placas propio** (`servidor/`, Cloudflare Worker) para consulta automática desde cualquier navegador; solo datos del vehículo. | ✅ publicado: https://autopublicador-placas.erick-costa.workers.dev (cuenta Cloudflare propia del usuario, proyecto independiente de AutoLab) |
 | RF21 | **Etiquetas para Marketplace** (`dominio/marketplace.ts`): hasta 20 etiquetas de búsqueda sacadas de los datos (marca, modelo, año, tipo deducido del modelo, ciudad de la ubicación, transmisión, casillas y etiquetas propias), las 7 primeras recomendadas; se copian una a una tocándolas o todas juntas, siguen cada cambio en vivo y el historial también las copia. Nunca mencionan financiamiento. | ✅ |
+| RF22 | **Apariencia** (`servicios/tema.ts`, Ajustes): tema Automático (el del teléfono), Claro u Oscuro y letra Normal o Grande; se aplica al instante, sin destello al abrir (`index.html` lo aplica antes de cargar) y la barra del navegador acompaña. Contraste WCAG AA medido en todas las pantallas y en los dos temas (`pruebas/e2e/apariencia.cjs`). | ✅ |
+| RF23 | **Historial de trabajo** (`dominio/historial.ts`): buscar (placa, marca, modelo, año, color), estado de venta Disponible / Reservado / Vendido con filtro y conteo, «guardada hace…» y recordatorio de volver a subir a los 7 días, duplicar, eliminar con «Deshacer». Buscador de placas. | ✅ |
+| RF24 | **Mis respuestas rápidas** (Ajustes): el vendedor escribe las suyas con campos `{vehiculo}`, `{precio}`, `{telefono}`, `{nombre}`, `{ubicacion}`, `{horario}` que se llenan con el vehículo en pantalla. | ✅ |
+| RF25 | **Copia de seguridad** (`dominio/respaldo.ts`): copiar o descargar todo y restaurarlo en otro teléfono, navegador o en la app instalada (APK); al restaurar se suman las publicaciones y placas que falten, sin borrar nada. La clave de Google no viaja en el respaldo. | ✅ |
+| RF26 | **Comodidades**: copiar título + descripción, enviar por WhatsApp, contador de caracteres, última pestaña recordada, aviso sin conexión, «Ir arriba», vibración al copiar, «Nuevo vehículo» con «Deshacer». | ✅ |
 | RF16 | **Comentarios y respuestas rápidas** para la publicación (disponible, cita, precio, cambio, papeles, horario, subir). | ✅ |
 
 ### No funcionales
@@ -159,10 +164,12 @@ plantillas, convierte `{{ubl|…}}`, `{{convert|…}}`/`{{convertir|…}}` y `&n
 
 ## 8. Pruebas
 
-- `npm test` — 90 pruebas (incluye 11 del servidor de placas) · `npm run test:integracion` — 6 con Wikipedia real unitarias (analizador con los casos de las publicaciones reales, teléfono, plantillas,
+- `npm test` — 368 pruebas (incluye las del servidor de placas) · `npm run test:integracion` — 6 con Wikipedia real unitarias (analizador con los casos de las publicaciones reales, teléfono, plantillas,
   fichas de Wikipedia con texto real, formato de respuesta de Gemini).
 - `npm run test:integracion` — 3 pruebas contra Wikipedia real (Peugeot 206, año fuera de producción, Chevrolet
   Vitara → Suzuki Vitara).
+- E2E en `pruebas/e2e/*.cjs` (Chrome real a 390 px): `apariencia`, `tiempo-real`, `etiquetas`, `etiquetas-fb`, `sugerencias`, `deuda`, `lote`.
+  El desbordamiento se mide con `max(scrollWidth, innerWidth) <= 391`: en modo celular Chrome agranda `innerWidth` si algo se sale.
 - Prueba de punta a punta en Chrome a 390 px (celular): perfil con validación, generar, autocompletado desde
   Wikipedia, aplicar un dato, cambiar de plantilla, copiar al portapapeles, historial, recarga con persistencia,
   sin desbordamiento horizontal, sin errores de consola.
@@ -216,3 +223,4 @@ de terceros, `.env` ni claves; mantener este archivo al día (sección 11).
 | 2026-11-25 | Etiquetas con una sola fuente (`dominio/etiquetas.ts`): marcar o quitar se refleja al instante en todos los títulos, descripciones y respuestas; sin «Negociable» el precio es fijo; «Negociable» y «Recibe cambio» vienen marcadas; etiquetas propias reutilizables; volver a generar la misma placa conserva lo editado a mano. Respuestas en su propia sección (última pestaña) y Guardar junto a Copiar descripción. Probado en las 192 combinaciones y E2E `pruebas/e2e/etiquetas.cjs`. |
 | 2026-11-25 | v0.12.0 — Todo en tiempo real: cada dato aparece o desaparece en todas las plantillas (las cortas solo suman el precio); texto libre, perfil, ubicación y beneficios se aplican sin guardar; el historial se arma con el vehículo, perfil y ajustes actuales y la publicación guardada se actualiza sola; los retoques a mano sobreviven (`dominio/retoques.ts`); cambiar el modelo renueva la investigación; sincronía entre pestañas. E2E `pruebas/e2e/tiempo-real.cjs`. |
 | 2026-11-25 | v0.13.0 — Etiquetas para el campo «Etiquetas» de Marketplace, debajo de la descripción (mismo orden que en Facebook) y en el historial. Corregido el analizador: «automática 15500» ya no se lee como «a 15500» (se perdía la transmisión). E2E `pruebas/e2e/etiquetas-fb.cjs`. |
+| 2026-11-26 | v0.14.0 — Sin nombres reales en la app ni en las pruebas (ejemplo «Juan Pérez»; el servidor de placas ya no se muestra en Ajustes). Tema Automático/Claro/Oscuro y letra grande, con contraste AA medido en todas las pantallas. Historial con búsqueda, estados de venta, antigüedad, duplicar y «Deshacer»; respuestas propias; copia de seguridad (para pasar los datos del navegador a la app APK); copiar título + descripción, WhatsApp, contador, aviso sin conexión, «Ir arriba». Corregido: los botones del tema ensanchaban Ajustes a 505 px (la prueba de desbordamiento no lo veía en modo celular). E2E `pruebas/e2e/apariencia.cjs`. |

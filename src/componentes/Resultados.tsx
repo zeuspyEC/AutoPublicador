@@ -24,7 +24,9 @@ export function Resultados({ v, titulos, descripciones, seleccion, cambiar, guar
   const t = titulos.find((x) => x.id === seleccion.tituloId) ?? titulos[0]
   const d = descripciones.find((x) => x.id === seleccion.descId) ?? descripciones[0]
   const textoDe = (tipo: 't' | 'd', x?: Variante) => textoVigente(v, tipo, x, seleccion)
-  const retocar = (clave: string, texto: string, base: string) => {
+  /** Título y descripción juntos: para enviarlos a otro vendedor o guardarlos en un chat. */
+  const completo = [textoDe('t', t), d ? textoDe('d', d) : ''].filter(Boolean).join('\n\n')
+  const retocar =(clave: string, texto: string, base: string) => {
     const { [clave]: _, ...resto } = seleccion.retoques
     cambiar({ ...seleccion, retoques: texto === base ? resto : { ...resto, [clave]: { texto, base } } })
   }
@@ -66,10 +68,13 @@ export function Resultados({ v, titulos, descripciones, seleccion, cambiar, guar
       </div>
       {d && (
         <div className="descripcion">
-          <textarea value={textoDe('d', d)} rows={18} onChange={(e) => retocar('d:' + d.id, e.target.value, d.texto)} />
+          <textarea value={textoDe('d', d)} rows={18} aria-label={`Descripción ${d.nombre}`} onChange={(e) => retocar('d:' + d.id, e.target.value, d.texto)} />
+          <span className="contador">{[...textoDe('d', d)].length} caracteres · {textoDe('d', d).split('\n').length} líneas</span>
           {tieneNumeroLimpio(textoDe('d', d)) && <p className="aviso">⚠️ Hay un número escrito seguido: Facebook podría ocultarlo. Sepáralo con guiones o puntos.</p>}
           <div className="fila">
             <Copiar texto={textoDe('d', d)} etiqueta="Copiar descripción" principal />
+            <Copiar texto={completo} etiqueta="Copiar título + descripción" />
+            <a className="boton secundario" href={`https://wa.me/?text=${encodeURIComponent(completo)}`} target="_blank" rel="noreferrer">Enviar por WhatsApp</a>
             <button type="button" className="boton secundario" disabled={guardada} onClick={alGuardar}>
               {guardada ? '✓ En el historial (se actualiza sola)' : 'Guardar en el historial'}
             </button>
