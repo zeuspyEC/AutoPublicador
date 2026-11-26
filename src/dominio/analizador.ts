@@ -57,7 +57,7 @@ export function analizar(texto: string): Analisis {
   const anterior = t.match(/(?:antes|precio anterior|rebajad[oa] de|de)\s*\$\s*([\d.,]{3,})/)
   if (anterior) { poner('precioAnterior', soloDigitos(anterior[1])); t = t.replace(anterior[0], ' ') }
   const precio = t.match(/\$\s*([\d.,]{3,})/) || t.match(/([\d.,]{3,})\s*(?:usd|d[oó]lares|dolares)\b/) ||
-    t.match(/(?:precio|vale|en|a)\s*:?\s*\$?\s*(\d{1,3}(?:[.,]\d{3})+|\d{3,6})\b(?!\s*(?:km|kms|cc|mil))/)
+    t.match(/(?<![a-záéíóúüñ])(?:precio|vale|en|a)\s*:?\s*\$?\s*(\d{1,3}(?:[.,]\d{3})+|\d{3,6})\b(?!\s*(?:km|kms|cc|mil))/)
   if (precio && !/^(19|20)\d\d$/.test(soloDigitos(precio[1]))) { poner('precio', soloDigitos(precio[1])); t = t.replace(precio[0], ' ') }
 
   // --- Matrícula (su año no es el año del carro) ---

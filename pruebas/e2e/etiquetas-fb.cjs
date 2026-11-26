@@ -1,0 +1,46 @@
+// Etiquetas para el campo «Etiquetas» de Marketplace: se generan, se copian una por una o todas y siguen los cambios.   node pruebas/e2e/etiquetas-fb.cjs [--url ...]
+const path = require('path')
+const { abrirApp, navegador, clic, SALIDA } = require('./comun.cjs')
+;(async () => {
+  const app = await abrirApp()
+  const { b, p, errores } = await navegador(app.url)
+  const espera = (ms) => new Promise((r) => setTimeout(r, ms)), fallos = []
+  const exigir = (c, m) => { console.log(c ? 'ok   ' : 'FALLA', m); if (!c) fallos.push(m) }
+  const chips = () => p.$$eval('.etiquetas-fb .chip', (xs) => xs.map((x) => x.textContent))
+  const copiado = () => p.evaluate(() => window.__c)
+  try {
+    p.on('dialog', (d) => d.accept())
+    await p.evaluate(() => { window.__c = ''; navigator.clipboard.writeText = async (t) => { window.__c = t } })
+    await p.type('textarea.entrada', 'Chevrolet Corsa 1.4 2002 manual rojo 3990'); await clic(p, 'button', 'Generar publicación')
+    await p.waitForSelector('.etiquetas-fb .chip', { timeout: 20000 }); await espera(800)
+    await p.evaluate(() => { navigator.clipboard.writeText = async (t) => { window.__c = t } })
+    let e = await chips()
+    console.log('   ', e.join(' | '))
+    exigir(e[0] === 'chevrolet corsa' && e.includes('corsa 2002') && e.includes('carros usados quito') && e.includes('carro económico'), 'etiquetas según el vehículo')
+    exigir(e.length <= 20 && new Set(e).size === e.length, 'máximo 20 y sin repetidas')
+    exigir(await p.evaluate(() => { const d = document.querySelector('.descripcion'), t = document.querySelector('.etiquetas-fb'); return !!(d.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING) }), 'van después de la descripción, como en Facebook')
+    await clic(p, '.etiquetas-fb .chip', 'corsa 2002'); await espera(150)
+    exigir(await copiado() === 'corsa 2002', 'tocar una etiqueta la copia sola')
+    exigir((await chips()).includes('¡Copiada! ✓'), 'confirma que se copió')
+    await clic(p, '.etiquetas-fb button', 'Copiar las 7'); await espera(150)
+    exigir((await copiado()).split(', ').length === 7, 'copiar las 7 recomendadas')
+    // tiempo real: modelo, año y casillas
+    const campo = async (etq, valor) => { const h = await p.evaluateHandle((x) => [...document.querySelectorAll('label.campo')].find((l) => l.querySelector('span')?.textContent.startsWith(x)).querySelector('input'), etq); await h.evaluate((x) => { x.focus(); x.select() }); await p.keyboard.press('Backspace'); if (valor) await p.keyboard.type(valor); await espera(300) }
+    await campo('Año', '2005'); e = await chips()
+    exigir(e.includes('corsa 2005') && !e.includes('corsa 2002'), 'cambiar el año actualiza las etiquetas')
+    exigir(e.includes('precio negociable'), 'negociable marcado')
+    await p.evaluate(() => [...document.querySelectorAll('.casilla')].find((x) => x.textContent.startsWith('Negociable')).querySelector('input').click()); await espera(300)
+    exigir(!(await chips()).includes('precio negociable'), 'quitar «Negociable» la quita de las etiquetas')
+    await clic(p, 'button', 'Guardar en el historial'); await espera(300)
+    await clic(p, 'nav button', 'Historial'); await espera(300)
+    await p.evaluate(() => { navigator.clipboard.writeText = async (t) => { window.__c = t } })
+    await clic(p, '.historial button', 'Copiar etiquetas'); await espera(200)
+    const h = await copiado(); exigir(/corsa 2005/.test(h) && !/negociable/.test(h), 'el historial copia las etiquetas al día')
+    await clic(p, 'nav button', 'Crear'); await espera(300)
+    await p.$eval('.etiquetas-fb', (x) => x.scrollIntoView()); await espera(300); await p.screenshot({ path: path.join(SALIDA, 'etiquetas-fb.png') })
+    exigir(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'sin desplazamiento horizontal en el celular')
+    exigir(!errores.length, 'sin errores ' + errores.join('|'))
+  } catch (err) { fallos.push(err.message); console.log(err) }
+  await b.close(); app.cerrar?.()
+  console.log(fallos.length ? 'INCORRECTO ' + fallos.join('; ') : 'CORRECTO'); process.exit(fallos.length ? 1 : 0)
+})()

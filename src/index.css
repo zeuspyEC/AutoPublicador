@@ -138,6 +138,8 @@ textarea.entrada { font-size: 1.05rem; }
 }
 .chip.activo { background: var(--primario-claro); border-color: var(--primario); color: var(--primario); }
 .chip:disabled { cursor: default; }
+.chip.copiado { background: var(--exito); border-color: var(--exito); color: var(--superficie); }
+.etiquetas-fb { margin-top: 1.2rem; }
 .agregar input { min-height: 36px; padding: .35rem .7rem; border-radius: 999px; width: 150px; }
 .ejemplos { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .8rem; }
 

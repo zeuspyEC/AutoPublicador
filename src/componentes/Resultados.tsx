@@ -3,6 +3,7 @@ import { tieneNumeroLimpio } from '../dominio/telefono'
 import type { Seleccion } from '../dominio/retoques'
 import type { Vehiculo } from '../dominio/tipos'
 import { Copiar } from './Copiar'
+import { EtiquetasFB } from './EtiquetasFB'
 
 interface Props {
   v: Vehiculo
@@ -12,12 +13,13 @@ interface Props {
   cambiar: (s: Seleccion) => void
   guardada: boolean
   alGuardar: () => void
+  etiquetas: string[]
 }
 
 const miles = (d: string) => (+d).toLocaleString('es-EC').replace(/,/g, '.')
 
 /** Variantes listas para copiar: el vendedor elige un título y una descripción (y puede retocarlos). */
-export function Resultados({ v, titulos, descripciones, seleccion, cambiar, guardada, alGuardar }: Props) {
+export function Resultados({ v, titulos, descripciones, seleccion, cambiar, guardada, alGuardar, etiquetas }: Props) {
   // Se elige por id (no por posición): al marcar o quitar etiquetas la lista cambia y la elección se conserva
   const t = titulos.find((x) => x.id === seleccion.tituloId) ?? titulos[0]
   const d = descripciones.find((x) => x.id === seleccion.descId) ?? descripciones[0]
@@ -75,6 +77,8 @@ export function Resultados({ v, titulos, descripciones, seleccion, cambiar, guar
           </div>
         </div>
       )}
+
+      <EtiquetasFB lista={etiquetas} />
     </div>
   )
 }

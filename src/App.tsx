@@ -16,6 +16,7 @@ import { PanelInvestigacion, type EstadoInvestigacion } from './componentes/Pane
 import { fusionar, valorParaCampo, type Diferencia } from './dominio/fusion'
 import { migrar } from './dominio/etiquetas'
 import { Respuestas } from './componentes/Respuestas'
+import { etiquetasMarketplace } from './dominio/marketplace'
 import { Resultados } from './componentes/Resultados'
 
 type Vista = 'crear' | 'historial' | 'ajustes' | 'respuestas'
@@ -121,6 +122,7 @@ export default function App() {
   const ctx = useMemo(() => (perfil ? { v, perfil, beneficios: ajustes.beneficios, ubicacion: ajustes.ubicacion } : null), [v, perfil, ajustes])
   const titulos = useMemo(() => (ctx ? generarTitulos(ctx) : []), [ctx])
   const descripciones = useMemo(() => (ctx ? generarDescripciones(ctx) : []), [ctx])
+  const etiquetasFB = useMemo(() => etiquetasMarketplace(v, ajustes.ubicacion), [v, ajustes.ubicacion])
   const comentarios = useMemo(() => (ctx ? generarComentarios(ctx) : []), [ctx])
   const conocidas = useMemo(() => placasConocidas(placas, historial), [placas, historial])
   const placaNormal = normalizarPlaca(placa)
@@ -394,7 +396,7 @@ export default function App() {
                 <section className="tarjeta paso">
                   <h2><span className="numero">4</span> Publicación lista</h2>
                   <Resultados v={v} titulos={titulos} descripciones={descripciones}
-                    seleccion={seleccion} cambiar={setSeleccion} guardada={guardada}
+                    seleccion={seleccion} cambiar={setSeleccion} guardada={guardada} etiquetas={etiquetasFB}
                     alGuardar={() => { almacen.guardarEnHistorial(publicacion()); setHistorial(almacen.historial()) }} />
                 </section>
               </>

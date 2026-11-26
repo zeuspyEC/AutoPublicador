@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { publicacionVigente } from '../dominio/plantillas'
 import { migrar } from '../dominio/etiquetas'
+import { etiquetasMarketplace } from '../dominio/marketplace'
 import { VEHICULO_VACIO } from '../dominio/tipos'
 import type { PlacaConsultada, Publicacion } from '../servicios/almacen'
 import { Copiar } from './Copiar'
@@ -23,8 +24,10 @@ const fecha = (iso: string) => new Date(iso).toLocaleString('es-EC', { dateStyle
 
 export function Historial({ lista, placas, abrir, borrar, usarPlaca, borrarPlaca, perfil, ajustes, refrescar }: Props) {
   // El texto de cada publicación se arma con su vehículo y el perfil y ajustes de ahora: nunca queda desactualizado
-  const vigentes = useMemo(() => lista.map((p) => ({ ...p, ...(p.seleccion && perfil
-    ? publicacionVigente({ v: migrar(p.vehiculo, VEHICULO_VACIO, (c) => p.origenes?.[c] === 'manual'), perfil, beneficios: ajustes.beneficios, ubicacion: ajustes.ubicacion }, p.seleccion) : {}) })), [lista, perfil, ajustes])
+  const vigentes = useMemo(() => lista.map((p) => {
+    const v = migrar(p.vehiculo, VEHICULO_VACIO, (c) => p.origenes?.[c] === 'manual')
+    return { ...p, etiquetas: etiquetasMarketplace(v, ajustes.ubicacion), ...(p.seleccion && perfil ? publicacionVigente({ v, perfil, beneficios: ajustes.beneficios, ubicacion: ajustes.ubicacion }, p.seleccion) : {}) }
+  }), [lista, perfil, ajustes])
 
   return (
     <div className="ajustes">
@@ -43,6 +46,7 @@ export function Historial({ lista, placas, abrir, borrar, usarPlaca, borrarPlaca
               <div className="fila">
                 <Copiar texto={p.titulo} etiqueta="Copiar título" />
                 <Copiar texto={p.descripcion} etiqueta="Copiar descripción" />
+                {p.etiquetas.length > 0 && <Copiar texto={p.etiquetas.join(', ')} etiqueta="Copiar etiquetas" />}
                 <button type="button" className="boton secundario" onClick={() => abrir(lista.find((x) => x.id === p.id)!)}>Abrir y editar</button>
                 <button type="button" className="icono" title="Eliminar" onClick={() => { if (confirm('¿Eliminar esta publicación del historial?')) borrar(p.id) }}>🗑</button>
               </div>
