@@ -50,6 +50,7 @@ Fuera de alcance por ahora: fotos (no hay almacenamiento), respuestas a clientes
 | RF23 | **Historial de trabajo** (`dominio/historial.ts`): buscar (placa, marca, modelo, año, color), estado de venta Disponible / Reservado / Vendido con filtro y conteo, «guardada hace…» y recordatorio de volver a subir a los 7 días, duplicar, eliminar con «Deshacer». Buscador de placas. | ✅ |
 | RF24 | **Mis respuestas rápidas** (Ajustes): el vendedor escribe las suyas con campos `{vehiculo}`, `{precio}`, `{telefono}`, `{nombre}`, `{ubicacion}`, `{horario}` que se llenan con el vehículo en pantalla. | ✅ |
 | RF25 | **Copia de seguridad** (`dominio/respaldo.ts`): copiar o descargar todo y restaurarlo en otro teléfono, navegador o en la app instalada (APK); al restaurar se suman las publicaciones y placas que falten, sin borrar nada. La clave de Google no viaja en el respaldo. | ✅ |
+| RF27 | **Consulta de placas** (página propia `/placas/`): ficha del SRI, verificación cruzada SRI ↔ ATM Guayaquil (marca, modelo, año), valores pendientes con desglose, historial de pagos y traspasos, impuesto ambiental, revisiones técnicas de ATM desde 2016, accesos a ANT/AMT/CTE (no se dejan leer desde otro sitio), informe para copiar/WhatsApp/imprimir, enlace `?placa=`, recientes y tema. | ✅ |
 | RF26 | **Comodidades**: copiar título + descripción, enviar por WhatsApp, contador de caracteres, última pestaña recordada, aviso sin conexión, «Ir arriba», vibración al copiar, «Nuevo vehículo» con «Deshacer». | ✅ |
 | RF16 | **Comentarios y respuestas rápidas** para la publicación (disponible, cita, precio, cambio, papeles, horario, subir). | ✅ |
 
@@ -80,7 +81,8 @@ flowchart LR
 | Dominio (puro, probado) | `src/dominio/tipos.ts`, `catalogo.ts`, `analizador.ts`, `telefono.ts`, `plantillas.ts` | Entender el texto, formatear el teléfono, redactar las variantes |
 | Servicios | `src/servicios/wikitexto.ts` (lectura de fichas), `investigador.ts` (Wikipedia + Google), `almacen.ts` (localStorage, copiar) | Datos externos y persistencia |
 | Interfaz (React) | `src/App.tsx`, `src/componentes/*.tsx`, `src/index.css` | Flujo en 4 pasos, ajustes, historial |
-| Servidor | `servidor/src/index.js`, `servidor/wrangler.toml` | Consulta el SRI para la app (CORS solo para la app, sin datos personales, caché 6 h) |
+| Servidor | `servidor/src/index.js`, `servidor/wrangler.toml` | `/placa/X`: SRI para la app · `/consulta/X`: SRI + ATM Guayaquil para la página de placas (CORS solo para zeuspyec.github.io, sin datos personales, caché 6 h, `?nuevo=1` la salta) |
+| Consulta de placas | `placas/index.html`, `src/placas/*` | Segunda página del mismo sitio: informe completo de una placa |
 | Despliegue | `.github/workflows/desplegar.yml`, `vite.config.ts` (`base: /AutoPublicador/`) | Pruebas → build → GitHub Pages |
 
 **Tecnologías:** React 19 + TypeScript + Vite 8, Vitest para pruebas, GitHub Actions + GitHub Pages.
@@ -164,11 +166,11 @@ plantillas, convierte `{{ubl|…}}`, `{{convert|…}}`/`{{convertir|…}}` y `&n
 
 ## 8. Pruebas
 
-- `npm test` — 368 pruebas (incluye las del servidor de placas) · `npm run test:integracion` — 6 con Wikipedia real unitarias (analizador con los casos de las publicaciones reales, teléfono, plantillas,
+- `npm test` — 377 pruebas (incluye las del servidor de placas) · `npm run test:integracion` — 6 con Wikipedia real unitarias (analizador con los casos de las publicaciones reales, teléfono, plantillas,
   fichas de Wikipedia con texto real, formato de respuesta de Gemini).
 - `npm run test:integracion` — 3 pruebas contra Wikipedia real (Peugeot 206, año fuera de producción, Chevrolet
   Vitara → Suzuki Vitara).
-- E2E en `pruebas/e2e/*.cjs` (Chrome real a 390 px): `apariencia`, `tiempo-real`, `etiquetas`, `etiquetas-fb`, `sugerencias`, `deuda`, `lote`.
+- E2E en `pruebas/e2e/*.cjs` (Chrome real a 390 px): `placas`, `apariencia`, `tiempo-real`, `etiquetas`, `etiquetas-fb`, `sugerencias`, `deuda`, `lote`.
   El desbordamiento se mide con `max(scrollWidth, innerWidth) <= 391`: en modo celular Chrome agranda `innerWidth` si algo se sale.
 - Prueba de punta a punta en Chrome a 390 px (celular): perfil con validación, generar, autocompletado desde
   Wikipedia, aplicar un dato, cambiar de plantilla, copiar al portapapeles, historial, recarga con persistencia,
@@ -224,3 +226,4 @@ de terceros, `.env` ni claves; mantener este archivo al día (sección 11).
 | 2026-11-25 | v0.12.0 — Todo en tiempo real: cada dato aparece o desaparece en todas las plantillas (las cortas solo suman el precio); texto libre, perfil, ubicación y beneficios se aplican sin guardar; el historial se arma con el vehículo, perfil y ajustes actuales y la publicación guardada se actualiza sola; los retoques a mano sobreviven (`dominio/retoques.ts`); cambiar el modelo renueva la investigación; sincronía entre pestañas. E2E `pruebas/e2e/tiempo-real.cjs`. |
 | 2026-11-25 | v0.13.0 — Etiquetas para el campo «Etiquetas» de Marketplace, debajo de la descripción (mismo orden que en Facebook) y en el historial. Corregido el analizador: «automática 15500» ya no se lee como «a 15500» (se perdía la transmisión). E2E `pruebas/e2e/etiquetas-fb.cjs`. |
 | 2026-11-26 | v0.14.0 — Sin nombres reales en la app ni en las pruebas (ejemplo «Juan Pérez»; el servidor de placas ya no se muestra en Ajustes). Tema Automático/Claro/Oscuro y letra grande, con contraste AA medido en todas las pantallas. Historial con búsqueda, estados de venta, antigüedad, duplicar y «Deshacer»; respuestas propias; copia de seguridad (para pasar los datos del navegador a la app APK); copiar título + descripción, WhatsApp, contador, aviso sin conexión, «Ir arriba». Corregido: los botones del tema ensanchaban Ajustes a 505 px (la prueba de desbordamiento no lo veía en modo celular). E2E `pruebas/e2e/apariencia.cjs`. |
+| 2026-11-27 | v0.15.0 — Página «Consulta de placas» (https://zeuspyec.github.io/AutoPublicador/placas/). Servidor: ruta `/consulta/X` que une SRI y ATM Guayaquil (consultas.atm.gob.ec, pública y sin captcha: marca, modelo, año y revisiones técnicas por año; los reportes no se abren porque traen datos del propietario). Fuentes revisadas y descartadas para lectura automática: ANT consultaweb (502 en noviembre de 2026) y axiscloud (ALLOW_DOMAIN), AMT apis (rechaza otros orígenes): no se falsifica el origen, se enlazan. E2E `pruebas/e2e/placas.cjs` con consultas reales. |

@@ -108,6 +108,69 @@ export function resumirPagos(pagos) {
     primerPago: fechas[0]?.slice(0, 10) ?? null, ultimoPago: fechas[fechas.length - 1]?.slice(0, 10) ?? null }
 }
 
+// ── ATM Guayaquil: consulta pública de revisiones técnicas (sin captcha). Devuelve marca, modelo y año del registro
+// nacional de cualquier placa, y las revisiones hechas en Guayaquil por año. No se abren los reportes (traen datos
+// del propietario).
+const ATM = 'https://consultas.atm.gob.ec/SVT/paginas/consultaCertificado.jsp'
+const ATM_DESDE = 2016
+
+const sinEtiquetas = (s) => s.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&iacute;/g, 'í').replace(/&Ntilde;/g, 'Ñ').replace(/\s+/g, ' ').trim()
+
+/** Lee la página de ATM: datos del vehículo y filas de la tabla de revisiones. */
+export function leerAtm(html) {
+  const texto = sinEtiquetas(html)
+  const dato = (re) => (texto.match(re)?.[1] ?? '').trim()
+  const marca = dato(/MARCA\s*:\s*(.+?)\s+MODELO\s*:/)
+  if (!marca) return null
+  const revisiones = []
+  const cuerpo = html.split(/<tbody[^>]*>/i)[1]?.split(/<\/tbody>/i)[0] ?? ''
+  for (const fila of cuerpo.split(/<tr[^>]*>/i).slice(1)) {
+    const celdas = [...fila.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((m) => sinEtiquetas(m[1]))
+    if (celdas.length >= 4 && /\d{2}-\d{2}-\d{4}/.test(celdas[1])) {
+      const [d, m, a] = celdas[1].split('-')
+      revisiones.push({ observacion: celdas[0], fecha: `${a}-${m}-${d}`, estado: celdas[2], revision: +celdas[3] || null })
+    }
+  }
+  return { marca, modelo: dato(/MODELO\s*:\s*(.+?)\s+AÑO\s*:/), anio: dato(/AÑO\s*:\s*(\d{4})/), revisiones }
+}
+
+async function pedirAtm(placa, anio, pedir) {
+  const c = new AbortController()
+  const t = setTimeout(() => c.abort(), 20000)
+  try {
+    const r = await pedir(ATM, { method: 'POST', signal: c.signal, body: `ps_placa=${placa}&ps_anio=${anio}`,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'AutoPublicador/1.0 (consulta de placa)' } })
+    return r.ok ? leerAtm(await r.text()) : null
+  } finally { clearTimeout(t) }
+}
+
+/** Datos del vehículo y revisiones técnicas de todos los años disponibles (más reciente primero). */
+export async function consultarAtm(placa, pedir = fetch, hoy = new Date()) {
+  const actual = hoy.getUTCFullYear()
+  for (const v of variantesPlaca(placa)) {
+    const primero = await pedirAtm(v, actual, pedir)
+    if (!primero) continue
+    const anios = []
+    for (let a = actual - 1; a >= ATM_DESDE; a--) anios.push(a)
+    const resto = await Promise.all(anios.map((a) => pedirAtm(v, a, pedir).catch(() => null)))
+    const vistas = new Set()
+    const revisiones = [primero, ...resto].flatMap((x) => x?.revisiones ?? [])
+      .filter((r) => { const k = `${r.fecha}|${r.revision}|${r.estado}`; return vistas.has(k) ? false : vistas.add(k) })
+      .sort((x, y) => y.fecha.localeCompare(x.fecha))
+    return { encontrada: true, registrada: v, marca: primero.marca, modelo: primero.modelo, anio: primero.anio, revisiones, desde: ATM_DESDE, hasta: actual }
+  }
+  return { encontrada: false }
+}
+
+/** Todas las fuentes automáticas a la vez; cada una informa su propio error sin detener a las demás. */
+export async function consultarTodo(placa, pedir = fetch) {
+  const [sri, atm] = await Promise.all([
+    consultarPlaca(placa, pedir).catch(() => ({ encontrada: false, error: 'El SRI no respondió. Intenta de nuevo en unos minutos.' })),
+    consultarAtm(placa, pedir).catch(() => ({ encontrada: false, error: 'ATM Guayaquil no respondió.' })),
+  ])
+  return { sri, atm }
+}
+
 export async function manejar(request, pedir = fetch) {
   const url = new URL(request.url)
   const origen = request.headers.get('Origin')
@@ -115,12 +178,27 @@ export async function manejar(request, pedir = fetch) {
   if (request.method !== 'GET') return json({ error: 'Método no permitido' }, 405, origen)
   if (url.pathname === '/salud') return json({ ok: true, servicio: 'AutoPublicador · placas' }, 200, origen)
 
-  const m = url.pathname.match(/^\/placa\/([A-Za-z0-9-]+)$/)
-  if (!m) return json({ error: 'Ruta no encontrada. Usa /placa/ABC1234' }, 404, origen)
-  const placa = m[1].toUpperCase().replace(/[^A-Z0-9]/g, '')
+  const m = url.pathname.match(/^\/(placa|consulta)\/([A-Za-z0-9-]+)$/)
+  if (!m) return json({ error: 'Ruta no encontrada. Usa /placa/ABC1234 o /consulta/ABC1234' }, 404, origen)
+  const placa = m[2].toUpperCase().replace(/[^A-Z0-9]/g, '')
   if (!placaValida(placa)) return json({ error: 'Placa no válida' }, 400, origen)
 
   const cache = typeof caches !== 'undefined' ? caches.default : null
+  if (m[1] === 'consulta') {
+    const claveC = new Request(`https://cache.autopublicador/v1/consulta/${placa}`)
+    if (cache && url.searchParams.get('nuevo') !== '1') {
+      const guardada = await cache.match(claveC)
+      if (guardada) return json(await guardada.json(), 200, origen, { 'X-Cache': 'HIT' })
+    }
+    const { sri, atm } = await consultarTodo(placa, pedir)
+    const cuerpoSri = sri.encontrada
+      ? { encontrada: true, registrada: sri.registrada, base: sri.base, rubros: sri.rubros, pagos: sri.pagos, componentes: sri.componentes, detallesPago: sri.detallesPago, planExcepcional: sri.planExcepcional, resumenPagos: sri.resumenPagos, impuestoAmbiental: sri.impuestoAmbiental }
+      : { encontrada: false, error: sri.error ?? (sri.estado >= 500 ? 'El SRI no respondió. Intenta de nuevo en unos minutos.' : `El SRI no tiene registrada la placa ${placa}.`) }
+    const cuerpo = { placa, consultado: new Date().toISOString(), sri: cuerpoSri, atm }
+    // Solo se guarda si al menos una fuente respondió con datos (un fallo de red no queda en caché)
+    if (cache && (sri.encontrada || atm.encontrada)) await cache.put(claveC, new Response(JSON.stringify(cuerpo), { headers: { 'Cache-Control': `max-age=${CACHE_SEGUNDOS}` } }))
+    return json(cuerpo, 200, origen, { 'X-Cache': 'MISS' })
+  }
   const clave = new Request(`https://cache.autopublicador/v5/placa/${placa}`)
   if (cache) {
     const guardada = await cache.match(clave)

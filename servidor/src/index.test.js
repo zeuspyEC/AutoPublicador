@@ -107,3 +107,45 @@ describe('servidor de placas: resumen de todo el historial de pagos', () => {
     ])).toEqual({ totalPagos: 4, traspasos: 2, ultimoTraspaso: '2024-10-23', primerPago: '2010-09-01', ultimoPago: '2024-10-23' })
   })
 })
+
+// HTML sintético con la misma estructura que la página de ATM Guayaquil
+const atmHtml = (placa, filas = '') => `<h3><i></i> INFORMACION DEL VEHICULO ${placa}</h3><ul><li>MARCA : CHEVROLET
+  </li><li>MODELO : GRAND VITARA 2.</li><li>A&Ntilde;O : 2012</li></ul>
+  ${filas ? `<table><thead><tr><th>Observación</th></tr></thead><tbody>${filas}</tbody></table>` : `Veh&iacute;culo ${placa} no tiene revisiones.`}`
+const filaAtm = (obs, fecha, estado, n) => `<tr><td>${obs}</td><td>${fecha}</td><td>${estado}</td><td>${n}</td><td><a onClick="printReporte('1','APR');">ver</a></td></tr>`
+
+describe('servidor de placas: ATM Guayaquil', () => {
+  it('lee marca, modelo, año y las filas de revisiones (fecha a formato año-mes-día)', async () => {
+    const { leerAtm } = await import('./index.js')
+    expect(leerAtm(atmHtml('GSD5678', filaAtm('RENOVACIÓN DE MATRÍCULA', '21-08-2025', 'APROBADO', 1))))
+      .toEqual({ marca: 'CHEVROLET', modelo: 'GRAND VITARA 2.', anio: '2012', revisiones: [{ observacion: 'RENOVACIÓN DE MATRÍCULA', fecha: '2025-08-21', estado: 'APROBADO', revision: 1 }] })
+    expect(leerAtm(atmHtml('GSB1234')).revisiones).toEqual([])
+    expect(leerAtm('<html>Error</html>')).toBeNull()
+  })
+  it('junta las revisiones de todos los años sin repetir y prueba la placa antigua con 0', async () => {
+    const { consultarAtm } = await import('./index.js')
+    const cuerpos = []
+    const r = await consultarAtm('PJM343', async (_url, init) => {
+      cuerpos.push(init.body)
+      if (!init.body.includes('PJM0343')) return new Response('<html></html>')
+      const anio = init.body.match(/ps_anio=(\d+)/)[1]
+      const filas = anio === '2025' ? filaAtm('MATRÍCULA', '21-08-2025', 'APROBADO', 1) + filaAtm('MATRÍCULA', '10-08-2025', 'CONDICIONADO', 2)
+        : anio === '2024' ? filaAtm('MATRÍCULA', '21-08-2025', 'APROBADO', 1) : ''
+      return new Response(atmHtml('PJM0343', filas))
+    }, new Date('2026-06-01'))
+    expect(cuerpos[0]).toBe('ps_placa=PJM0343&ps_anio=2026')
+    expect(r.registrada).toBe('PJM0343')
+    expect(r.revisiones.map((x) => x.fecha)).toEqual(['2025-08-21', '2025-08-10'])
+    expect(r.hasta).toBe(2026)
+  })
+  it('/consulta une SRI y ATM, y si el SRI no tiene la placa igual entrega ATM', async () => {
+    const r = await manejar(pedido('/consulta/GSD5678'), async (url, init) => {
+      if (url.includes('atm.gob.ec')) return new Response(atmHtml('GSD5678'))
+      return new Response('null')
+    })
+    const j = await r.json()
+    expect(r.status).toBe(200)
+    expect(j.sri).toEqual({ encontrada: false, error: 'El SRI no tiene registrada la placa GSD5678.' })
+    expect(j.atm).toMatchObject({ encontrada: true, marca: 'CHEVROLET', anio: '2012' })
+  })
+})
