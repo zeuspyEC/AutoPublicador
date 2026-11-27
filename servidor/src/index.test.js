@@ -149,3 +149,43 @@ describe('servidor de placas: ATM Guayaquil', () => {
     expect(j.atm).toMatchObject({ encontrada: true, marca: 'CHEVROLET', anio: '2012' })
   })
 })
+
+// Forma real de la API pública de la AMT (valores inventados)
+const amtVehiculo = { numVehiculo: '555', placa: 'PJM0343', chasis: 'JN**********43', motor: 'QR**********6L', placaAnt: '', anio: '1992', marca: 'SUZUKI', modelo: 'FORSA', tipo: 'LIVIANO', subTipo: 'AUTOMOVIL 4 TIEMPOS' }
+const amtRevisiones = [
+  { numRevision: '2', centroRevision: 'CENTRO A', fechaPresentacion: '2025-06-10', fechaVencimiento: '2025-12-31', estadoRevision: 'APROBADO', codRevision: '22' },
+  { numRevision: '1', centroRevision: 'CENTRO A', fechaPresentacion: '2025-06-01', fechaVencimiento: '2025-12-31', estadoRevision: 'CONDICIONAL', codRevision: '21' },
+  { numRevision: '1', centroRevision: '', fechaPresentacion: 'Ninguna', fechaVencimiento: '2024-12-31', estadoRevision: 'NO SE PRESENTÓ', codRevision: '20' },
+]
+const medicion = (causa, maquina, valor = '30.00', unidad = '%', descripcion = '') => ({ codigoCausa: causa, descCausa: causa === 'OK' ? 'OK' : 'Grave', descripcionMaquina: maquina, valorMedido: valor, unidadMedida: unidad, descripcion })
+const amtDetalle = (km, defectos = []) => ({ revision: { kilometraje: km, numCertificado: '135', numAdhesivo: '0069', fechaEmision: '2025-06-10' },
+  defectosMecatronicos: [medicion('OK', 'FRENO'), ...defectos], defectosVisuales: [medicion('GRV', 'PARABRISAS', '0.00', '***', 'franjas')], defectosMedibles: [] })
+
+describe('servidor de placas: AMT Quito', () => {
+  const pedirAmt = (urls) => async (url, init) => {
+    urls.push([url, init?.body])
+    const b = JSON.parse(init.body)
+    if (url.endsWith('vehiculo/getData')) return b.dato === 'PJM0343'
+      ? new Response(JSON.stringify({ codRetorno: '0001', retorno: { vehiculo: amtVehiculo, revisiones: amtRevisiones } }))
+      : new Response('<html>404</html>', { status: 404 })
+    if (url.endsWith('revision/getCabecera')) return new Response(JSON.stringify({ codRetorno: '0001', retorno: amtDetalle(b.codRevision === '22' ? '00175729' : '00175700', [medicion('MDO', 'SUSPENSIÓN')]) }))
+    return new Response('', { status: 404 })
+  }
+  it('prueba la placa antigua con 0, pide el detalle solo de las revisiones presentadas y lee kilometraje y defectos', async () => {
+    const { consultarAmt } = await import('./index.js')
+    const urls = []
+    const r = await consultarAmt('PJM343', pedirAmt(urls))
+    expect(r.registrada).toBe('PJM0343')
+    expect(r.vehiculo).toMatchObject({ marca: 'SUZUKI', tipo: 'LIVIANO', subtipo: 'AUTOMOVIL 4 TIEMPOS', chasis: 'JN**********43', placaAnterior: null })
+    expect(urls.filter(([u]) => u.endsWith('getCabecera')).map(([, b]) => JSON.parse(b).codRevision)).toEqual(['22', '21'])
+    expect(r.revisiones.map((x) => [x.fecha, x.estado, x.kilometraje])).toEqual([['2025-06-10', 'APROBADO', 175729], ['2025-06-01', 'CONDICIONAL', 175700], [null, 'NO SE PRESENTÓ', null]])
+    expect(r.revisiones[0].defectos.map((d) => [d.tipo, d.elemento, d.nota])).toEqual([['Mecatrónico', 'SUSPENSIÓN', null], ['Visual', 'PARABRISAS', 'franjas']])
+    expect(r.revisiones[0].mediciones).toHaveLength(3) // solo la última trae todas las mediciones
+    expect(r.revisiones[1].mediciones).toBeUndefined()
+    expect(r.revisiones[0].defectos[1].valor).toBeNull() // «***» no es una unidad
+  })
+  it('/amt responde aunque la AMT no tenga la placa', async () => {
+    const r = await manejar(pedido('/amt/GSD5678'), pedirAmt([]))
+    expect(await r.json()).toMatchObject({ placa: 'GSD5678', amt: { encontrada: false } })
+  })
+})

@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copiar } from '../componentes/Copiar'
 import { copiar } from '../servicios/almacen'
 import { normalizarPlaca, placaValida, SERVIDOR_PLACAS } from '../servicios/placa'
 import {
-  compararFuentes, dinero, fecha, FUENTES_MANUALES, informeTexto, interpretacion, NIVELES, nivelDeVerificacion, valoresPendientes,
-  type RespuestaConsulta, type SriConsulta,
+  avisosDe, compararFuentes, dinero, fecha, FUENTES_MANUALES, informeTexto, interpretacion, km, kilometraje, NOMBRE_FUENTE, nivelDeVerificacion,
+  textoNivel, valoresPendientes, type AmtConsulta, type Fuente, type MedicionAmt, type RespuestaConsulta, type SriConsulta,
 } from './informe'
+
+/** Servidor de consultas; `ap.placas.servidor` permite probar con uno local (wrangler dev). */
+const servidor = () => { try { return localStorage.getItem('ap.placas.servidor') || SERVIDOR_PLACAS } catch { return SERVIDOR_PLACAS } }
+type EstadoAmt = 'cargando' | 'listo' | 'sin-respuesta'
 
 const CLAVE_RECIENTES = 'ap.placas.recientes'
 const CLAVE_TEMA = 'ap.placas.tema'
@@ -32,11 +36,22 @@ function aplicarTema(t: Tema) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', oscuro ? '#0b1020' : '#1e3a8a')
 }
 
+/** Revisión técnica de la AMT (ruta aparte): null si no respondió. */
+async function pedirAmt(placa: string, nuevo: boolean): Promise<AmtConsulta | null> {
+  const c = new AbortController()
+  const t = setTimeout(() => c.abort(), 60000)
+  try {
+    const r = await fetch(`${servidor()}/amt/${placa}${nuevo ? '?nuevo=1' : ''}`, { signal: c.signal, headers: { Accept: 'application/json' } })
+    const j = r.ok ? await r.json().catch(() => null) : null
+    return j?.amt && !j.amt.error ? (j.amt as AmtConsulta) : null
+  } catch { return null } finally { clearTimeout(t) }
+}
+
 async function pedirConsulta(placa: string, nuevo: boolean): Promise<RespuestaConsulta> {
   const c = new AbortController()
   const t = setTimeout(() => c.abort(), 70000)
   try {
-    const r = await fetch(`${SERVIDOR_PLACAS}/consulta/${placa}${nuevo ? '?nuevo=1' : ''}`, { signal: c.signal, headers: { Accept: 'application/json' } })
+    const r = await fetch(`${servidor()}/consulta/${placa}${nuevo ? '?nuevo=1' : ''}`, { signal: c.signal, headers: { Accept: 'application/json' } })
     const j = await r.json().catch(() => null)
     if (!r.ok || !j) throw new Error(j?.error ?? `El servidor respondió ${r.status}.`)
     return j as RespuestaConsulta
@@ -55,6 +70,8 @@ export function ConsultaPlacas() {
   const [error, setError] = useState('')
   const [recientes, setRecientes] = useState<string[]>(() => leer(CLAVE_RECIENTES, []))
   const [tema, setTema] = useState<Tema>(() => leer(CLAVE_TEMA, 'sistema'))
+  const [estadoAmt, setEstadoAmt] = useState<EstadoAmt>('cargando')
+  const turno = useRef(0)
 
   useEffect(() => {
     aplicarTema(tema)
@@ -77,9 +94,23 @@ export function ConsultaPlacas() {
     setEstado('cargando')
     setError('')
     history.replaceState(null, '', `?placa=${placa}`)
+    // La AMT va en paralelo y llega después: el resultado del SRI y la ATM se muestra sin esperarla
+    const mio = ++turno.current
+    setEstadoAmt('cargando')
+    // La AMT puede responder antes o después que el SRI: su respuesta se guarda aquí y se une a la que llegue después
+    let amtLlego: { valor: AmtConsulta | undefined } | null = null
+    void pedirAmt(placa, nuevo).then((a) => {
+      if (turno.current !== mio) return
+      amtLlego = { valor: a ?? undefined }
+      setDatos((d) => (d && d.placa === placa ? { ...d, amt: a ?? undefined } : d))
+      setEstadoAmt(a ? 'listo' : 'sin-respuesta')
+      if (a?.encontrada) setRecientes((l) => { const n = [placa, ...l.filter((x) => x !== placa)].slice(0, 8); guardar(CLAVE_RECIENTES, n); return n })
+    })
     try {
       const r = await pedirConsulta(placa, nuevo)
-      setDatos(r)
+      if (turno.current !== mio) return
+      const amtYa = amtLlego as { valor: AmtConsulta | undefined } | null
+      setDatos({ ...r, amt: amtYa?.valor })
       setEstado('listo')
       if (r.sri.encontrada || r.atm.encontrada) setRecientes((l) => { const n = [placa, ...l.filter((x) => x !== placa)].slice(0, 8); guardar(CLAVE_RECIENTES, n); return n })
       document.title = `${placa} · Consulta de placas`
@@ -121,7 +152,7 @@ export function ConsultaPlacas() {
 
       {estado === 'cargando' && <Cargando placa={entrada} />}
       {estado === 'error' && <div className="tarjeta error-consulta" role="alert"><strong>No se pudo consultar</strong><p>{error}</p>{placaValida(entrada) && <button type="button" className="boton secundario" onClick={() => void consultar(entrada, true)}>Reintentar</button>}</div>}
-      {estado === 'listo' && datos && <Resultado datos={datos} actualizar={() => void consultar(datos.placa, true)} />}
+      {estado === 'listo' && datos && <Resultado datos={datos} estadoAmt={estadoAmt} actualizar={() => void consultar(datos.placa, true)} />}
       {estado === 'inicio' && <Presentacion />}
 
       <footer className="pie-placas">
@@ -142,8 +173,9 @@ function Presentacion() {
         <li><strong>Valores pendientes</strong> de matrícula y transferencia, con recargos e intereses.</li>
         <li><strong>Historial de pagos</strong> y cuántos traspasos de dominio se pagaron.</li>
         <li><strong>Cilindraje</strong> calculado con el impuesto ambiental pagado (cuando el SRI no lo informa).</li>
-        <li><strong>Revisiones técnicas</strong> registradas en la ATM de Guayaquil desde 2016.</li>
-        <li>Accesos directos a <strong>ANT, AMT y CTE</strong> para multas y revisión en Quito.</li>
+        <li><strong>Revisiones técnicas</strong> de Quito (AMT) y Guayaquil (ATM), con defectos encontrados.</li>
+        <li><strong>Kilometraje</strong> registrado en cada revisión técnica, con alerta si el odómetro retrocedió.</li>
+        <li>Accesos directos a <strong>CTE, ANT y AMT</strong> para consultar multas.</li>
       </ul>
     </section>
   )
@@ -162,14 +194,17 @@ function Cargando({ placa }: { placa: string }) {
   )
 }
 
-function Resultado({ datos, actualizar }: { datos: RespuestaConsulta; actualizar: () => void }) {
+function Resultado({ datos, estadoAmt, actualizar }: { datos: RespuestaConsulta; estadoAmt: EstadoAmt; actualizar: () => void }) {
   const comparacion = useMemo(() => compararFuentes(datos), [datos])
   const nivel = nivelDeVerificacion(datos, comparacion)
+  const sello = textoNivel(datos, nivel)
   const inter = useMemo(() => interpretacion(datos), [datos])
+  const avisos = useMemo(() => avisosDe(datos, inter), [datos, inter])
   const texto = useMemo(() => informeTexto(datos), [datos])
   const { sri, atm } = datos
   const b = sri.base
-  const nombre = [b?.descripcionMarca ?? atm.marca, b?.descripcionModelo ?? atm.modelo, String(b?.anioAuto ?? atm.anio ?? '')].filter(Boolean).map(titulo).join(' ')
+  const q = datos.amt?.encontrada ? datos.amt.vehiculo : undefined
+  const nombre = [b?.descripcionMarca ?? atm.marca ?? q?.marca, b?.descripcionModelo ?? q?.modelo ?? atm.modelo, String(b?.anioAuto ?? atm.anio ?? q?.anio ?? '')].filter(Boolean).map(titulo).join(' ')
   const compartir = async () => {
     const url = `${location.origin}${location.pathname}?placa=${datos.placa}`
     if (navigator.share) { try { await navigator.share({ title: `Placa ${datos.placa}`, text: nombre, url }); return } catch { /* cancelado */ } }
@@ -187,8 +222,9 @@ function Resultado({ datos, actualizar }: { datos: RespuestaConsulta; actualizar
           </div>
         </div>
         <div className={`sello nivel-${nivel}`} role="status">
-          <strong>{nivel === 'verificada' ? '✔' : nivel === 'no-encontrada' ? '✖' : '⚠'} {NIVELES[nivel].titulo}</strong>
-          <span>{NIVELES[nivel].texto}</span>
+          <strong>{nivel === 'verificada' ? '✔' : nivel === 'no-encontrada' ? '✖' : '⚠'} {sello.titulo}</strong>
+          <span>{sello.texto}</span>
+          {estadoAmt === 'cargando' && <span className="ayuda-sello"><span className="girando chico" aria-hidden="true" /> Consultando también la AMT de Quito…</span>}
         </div>
         <div className="fila acciones no-imprimir">
           <Copiar texto={texto} etiqueta="Copiar informe" principal />
@@ -199,39 +235,141 @@ function Resultado({ datos, actualizar }: { datos: RespuestaConsulta; actualizar
         </div>
       </section>
 
-      {inter && inter.avisos.length > 0 && (
+      {avisos.length > 0 && (
         <section className="tarjeta avisos-placa" aria-labelledby="t-avisos">
           <h2 id="t-avisos">⚠️ Para tener en cuenta</h2>
-          <ul>{inter.avisos.map((a) => <li key={a}>{a}</li>)}</ul>
+          <ul>{avisos.map((a) => <li key={a}>{a}</li>)}</ul>
         </section>
       )}
 
       {comparacion.length > 0 && (
         <section className="tarjeta" aria-labelledby="t-verif">
           <h2 id="t-verif">Verificación entre fuentes</h2>
-          <div className="tabla-scroll">
-            <table className="tabla">
-              <thead><tr><th scope="col">Dato</th><th scope="col">SRI</th><th scope="col">ATM</th><th scope="col">Resultado</th></tr></thead>
-              <tbody>
-                {comparacion.map((c) => (
-                  <tr key={c.dato}>
-                    <th scope="row">{c.dato}</th><td>{c.sri || '—'}</td><td>{c.atm || '—'}</td>
-                    <td><span className={`etiqueta-estado ${c.estado}`}>{{ coincide: '✔ Coincide', difiere: '⚠ Difiere', 'solo-sri': 'Solo SRI', 'solo-atm': 'Solo ATM' }[c.estado]}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="verificacion">
+            {comparacion.map((c) => (
+              <li key={c.dato}>
+                <div className="verificacion-cabecera">
+                  <strong>{c.dato}</strong>
+                  <span className={`etiqueta-estado ${c.estado}`}>{{ coincide: '✔ Coincide', difiere: '⚠ Difiere', 'una-fuente': 'Una sola fuente' }[c.estado]}</span>
+                </div>
+                <dl>{(Object.entries(c.valores) as [Fuente, string][]).map(([f, v]) => <div key={f}><dt>{NOMBRE_FUENTE[f]}</dt><dd>{v}</dd></div>)}</dl>
+              </li>
+            ))}
+          </ul>
           <p className="ayuda">La ATM guarda el modelo abreviado: se considera igual si coincide el comienzo.</p>
         </section>
       )}
 
       <FichaSri sri={sri} cilindraje={inter?.hallazgos.find((h) => h.campo === 'motor')} />
       {sri.encontrada && <Valores sri={sri} />}
+      <Kilometraje amt={datos.amt} />
       {sri.encontrada && <Pagos sri={sri} />}
+      <RevisionesAmt amt={datos.amt} estado={estadoAmt} />
       <Revisiones datos={datos} />
-      <OtrasFuentes placa={datos.placa} />
+      <OtrasFuentes placa={datos.placa} conAmt={!!datos.amt?.encontrada} />
     </div>
+  )
+}
+
+function Kilometraje({ amt }: { amt?: AmtConsulta }) {
+  const k = useMemo(() => kilometraje(amt), [amt])
+  if (!k.ultima) return null
+  const lecturas = [...k.lecturas].reverse()
+  return (
+    <section className="tarjeta" aria-labelledby="t-km">
+      <h2 id="t-km">Kilometraje registrado · AMT Quito</h2>
+      <div className="cifras">
+        <div><span>Última lectura</span><strong>{km(k.ultima.km)}</strong></div>
+        <div><span>Fecha</span><strong>{fecha(k.ultima.fecha)}</strong></div>
+        {k.porAnio && <div><span>Promedio por año</span><strong>{km(k.porAnio)}</strong></div>}
+        <div><span>Lecturas</span><strong>{k.lecturas.length}</strong></div>
+      </div>
+      {k.retrocesos.length > 0 ? (
+        <p className="alerta-km" role="alert">⚠️ El odómetro retrocedió {k.retrocesos.length === 1 ? 'una vez' : `${k.retrocesos.length} veces`}: {k.retrocesos.map((x) => `${km(x.antes.km)} (${fecha(x.antes.fecha)}) → ${km(x.despues.km)} (${fecha(x.despues.fecha)})`).join('; ')}. Puede ser un cambio de tablero o una adulteración: pide la explicación y revisa el vehículo.</p>
+      ) : k.lecturas.length > 1 && <p className="estado-ok">✔ El kilometraje siempre aumentó entre revisiones.</p>}
+      <div className="tabla-scroll">
+        <table className="tabla">
+          <thead><tr><th scope="col">Fecha</th><th scope="col" className="num">Kilometraje</th><th scope="col" className="num" title="Kilómetros recorridos desde la lectura anterior">Recorrido</th></tr></thead>
+          <tbody>{lecturas.map((l, i) => {
+            const previa = lecturas[i + 1]
+            const dif = previa ? l.km - previa.km : null
+            return <tr key={`${l.fecha}-${i}`}><td>{fecha(l.fecha)}</td><td className="num">{km(l.km)}</td><td className={`num ${dif !== null && dif < 0 ? 'negativo' : ''}`}>{dif === null ? '—' : `${dif > 0 ? '+' : ''}${km(dif)}`}</td></tr>
+          })}</tbody>
+        </table>
+      </div>
+      <p className="ayuda">Lecturas del odómetro tomadas en cada revisión técnica vehicular de Quito.</p>
+    </section>
+  )
+}
+
+const claseResultado = (r: string) => (/APROB|^OK$|EXONER/i.test(r) ? 'coincide' : /CONDIC|MODERAD|LEVE/i.test(r) ? 'una-fuente' : 'difiere')
+
+function ListaMediciones({ lista }: { lista: MedicionAmt[] }) {
+  return (
+    <ul className="mediciones">
+      {lista.map((m, i) => (
+        <li key={i}>
+          <span>{titulo(m.elemento)}{m.nota && <small> · «{m.nota}»</small>}</span>
+          <span className="medicion-valor">{m.valor && <small>{m.valor}</small>}<span className={`etiqueta-estado ${claseResultado(m.resultado)}`}>{m.resultado}</span></span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function RevisionesAmt({ amt, estado }: { amt?: AmtConsulta; estado: EstadoAmt }) {
+  if (estado === 'cargando') {
+    return <section className="tarjeta cargando" aria-busy="true" aria-labelledby="t-amt"><h2 id="t-amt">Revisión técnica · AMT Quito</h2><p><span className="girando chico" aria-hidden="true" /> Consultando el historial de revisiones, el kilometraje y los defectos…</p></section>
+  }
+  if (!amt) {
+    return (
+      <section className="tarjeta" aria-labelledby="t-amt">
+        <h2 id="t-amt">Revisión técnica · AMT Quito</h2>
+        <p className="ayuda">La AMT de Quito no respondió al servidor de consultas (solo atiende conexiones desde Ecuador). Ábrela con el botón de «Otras consultas oficiales»: se copia la placa para pegarla allí.</p>
+      </section>
+    )
+  }
+  if (!amt.encontrada) return <section className="tarjeta" aria-labelledby="t-amt"><h2 id="t-amt">Revisión técnica · AMT Quito</h2><p className="ayuda">La AMT de Quito no tiene revisiones de esta placa (el vehículo no se ha revisado en Quito).</p></section>
+  const v = amt.vehiculo
+  const revs = amt.revisiones ?? []
+  const ultima = revs.find((r) => r.mediciones?.length)
+  return (
+    <section className="tarjeta" aria-labelledby="t-amt">
+      <h2 id="t-amt">Revisión técnica · AMT Quito</h2>
+      {v && (
+        <dl className="ficha compacta">
+          {([['Tipo', v.tipo], ['Subtipo', v.subtipo], ['Placa anterior', v.placaAnterior], ['Chasis (parcial)', v.chasis], ['Motor (parcial)', v.motor]] as [string, string | null][])
+            .filter(([, x]) => x).map(([k, x]) => <div key={k}><dt>{k}</dt><dd>{titulo(x).replace(/\*+/g, '•••')}</dd></div>)}
+        </dl>
+      )}
+      {!revs.length ? <p className="ayuda">Sin revisiones registradas.</p> : (
+        <div className="tabla-scroll">
+          <table className="tabla">
+            <thead><tr><th scope="col">Fecha</th><th scope="col">Resultado</th><th scope="col" className="num">Kilometraje</th></tr></thead>
+            <tbody>{revs.map((r, i) => (
+              <tr key={i}>
+                <td>{r.fecha ? fecha(r.fecha) : <span className="ayuda">Vencía {fecha(r.vence)}</span>}{r.centro && <small className="desglose">{titulo(r.centro)}</small>}</td>
+                <td><span className={`etiqueta-estado ${claseResultado(r.estado)}`}>{titulo(r.estado)}</span>{r.defectos.length > 0 && <small className="desglose">{r.defectos.length} defecto(s)</small>}</td>
+                <td className="num">{r.kilometraje ? km(r.kilometraje) : '—'}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+      {revs.filter((r) => r.defectos.length).map((r, i) => (
+        <details key={i} className="detalle">
+          <summary>Defectos del {fecha(r.fecha)} · {titulo(r.estado)} ({r.defectos.length})</summary>
+          <ListaMediciones lista={r.defectos} />
+        </details>
+      ))}
+      {ultima && (
+        <details className="detalle">
+          <summary>Todas las pruebas de la última revisión ({fecha(ultima.fecha)}, {ultima.mediciones!.length})</summary>
+          <p className="ayuda">Frenos, suspensión, alineación, luces, emisiones y ruido medidos por el centro de revisión.</p>
+          <ListaMediciones lista={ultima.mediciones!} />
+        </details>
+      )}
+    </section>
   )
 }
 
@@ -368,7 +506,7 @@ function Revisiones({ datos }: { datos: RespuestaConsulta }) {
                 <thead><tr><th scope="col">Fecha</th><th scope="col">Trámite</th><th scope="col">Resultado</th></tr></thead>
                 <tbody>{rev.map((r, i) => (
                   <tr key={i}><td>{fecha(r.fecha)}</td><td>{titulo(r.observacion)}</td>
-                    <td><span className={`etiqueta-estado ${/APROB/i.test(r.estado) ? 'coincide' : /CONDIC/i.test(r.estado) ? 'solo-sri' : 'difiere'}`}>{titulo(r.estado)}</span>
+                    <td><span className={`etiqueta-estado ${claseResultado(r.estado)}`}>{titulo(r.estado)}</span>
                       {r.revision != null && <small className="desglose">Revisión n.º {r.revision}</small>}</td></tr>
                 ))}</tbody>
               </table>
@@ -380,13 +518,13 @@ function Revisiones({ datos }: { datos: RespuestaConsulta }) {
   )
 }
 
-function OtrasFuentes({ placa }: { placa: string }) {
+function OtrasFuentes({ placa, conAmt }: { placa: string; conAmt: boolean }) {
   return (
     <section className="tarjeta no-imprimir" aria-labelledby="t-otras">
       <h2 id="t-otras">Otras consultas oficiales</h2>
-      <p className="ayuda">Estas entidades no permiten que otras páginas lean sus datos: el botón copia la placa y abre su consulta oficial para que la pegues allí.</p>
+      <p className="ayuda">Estas consultas piden un captcha o no se dejan leer automáticamente: el botón copia la placa y abre la consulta oficial para que la pegues allí.</p>
       <ul className="otras-fuentes">
-        {FUENTES_MANUALES.map((f) => (
+        {FUENTES_MANUALES.filter((f) => !(conAmt && f.amt)).map((f) => (
           <li key={f.url}>
             <div><strong>{f.nombre}</strong><small>{f.detalle}</small></div>
             <button type="button" className="boton secundario" onClick={async () => { await copiar(placa); window.open(f.url, '_blank', 'noopener') }}>Copiar placa y abrir</button>

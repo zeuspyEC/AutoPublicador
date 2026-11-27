@@ -1,6 +1,7 @@
 // Página «Consulta de placas» de punta a punta, con consultas REALES al servidor publicado (SRI + ATM Guayaquil):
 // verificación cruzada, ficha, valores, revisiones, enlaces oficiales, informe, recientes, tema claro/oscuro con
-// contraste medido, sin desbordamiento en celular e impresión.   node pruebas/e2e/placas.cjs [--url ...]
+// contraste medido, sin desbordamiento en celular e impresión. Con --servidor http://127.0.0.1:8787 (wrangler dev desde
+// Ecuador) también prueba la AMT de Quito: kilometraje, revisiones y defectos.   node pruebas/e2e/placas.cjs [--url ...] [--servidor ...]
 const path = require('path')
 const { abrirApp, navegador, medirContraste, SALIDA } = require('./comun.cjs')
 
@@ -25,8 +26,13 @@ const { abrirApp, navegador, medirContraste, SALIDA } = require('./comun.cjs')
     await p.$eval('#placa', (e) => { e.value = '' })
     await p.type('#placa', placa)
     await p.click('form button[type=submit]')
-    await p.waitForSelector('.resultado-placa, .error-consulta', { timeout: 90000 })
+    // Espera el resultado de ESTA placa (el anterior sigue en pantalla hasta que se reemplaza)
+    const normal = placa.toUpperCase().replace(/[^A-Z0-9]/g, '')
+    await p.waitForFunction((n) => document.querySelector('.error-consulta') || document.querySelector('.titulo-placa .chapa')?.textContent === n, { timeout: 90000 }, normal)
   }
+  const iS = process.argv.indexOf('--servidor'), servidor = iS > 0 ? process.argv[iS + 1] : ''
+  if (servidor) await p.evaluateOnNewDocument((s) => localStorage.setItem('ap.placas.servidor', s), servidor)
+  const esperarAmt = () => p.waitForFunction(() => !document.querySelector('#t-amt')?.closest('section')?.getAttribute('aria-busy'), { timeout: 90000 })
   await p.evaluateOnNewDocument(() => { window.__copiado = ''; Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (t) => { window.__copiado = t } } }) })
 
   try {
@@ -44,8 +50,9 @@ const { abrirApp, navegador, medirContraste, SALIDA } = require('./comun.cjs')
     // 3) Placa real con datos en SRI y ATM (con guion y minúsculas: se normaliza)
     await consultar('gsd-5678')
     exigir((await p.$eval('#placa', (e) => e.value)) === 'GSD5678', 'normaliza «gsd-5678» → GSD5678')
-    exigir((await texto('.sello')).includes('verificados en 2 fuentes'), 'GSD5678: verificada en 2 fuentes')
-    const estados = await p.$$eval('#t-verif ~ .tabla-scroll .etiqueta-estado', (x) => x.map((e) => e.textContent))
+    await esperarAmt()
+    exigir((await texto('.sello')).includes('verificados en 2 fuentes'), 'GSD5678: verificada en 2 fuentes (no tiene revisiones en Quito)')
+    const estados = await p.$$eval('.verificacion .etiqueta-estado', (x) => x.map((e) => e.textContent))
     exigir(estados.length === 3 && estados.every((e) => e.includes('Coincide')), `marca, modelo y año coinciden (${estados.join(', ')})`)
     exigir((await texto('.ficha')).includes('Chevrolet'), 'ficha del SRI con la marca')
     exigir((await p.$$('#t-rtv ~ .tabla-scroll tbody tr')).length > 0, 'tabla de revisiones técnicas de ATM con filas')
@@ -58,11 +65,36 @@ const { abrirApp, navegador, medirContraste, SALIDA } = require('./comun.cjs')
     await contraste('resultado (claro)')
     await foto('resultado-claro')
 
+    // 3b) AMT de Quito
+    await esperarAmt()
+    if (servidor) {
+      await consultar('PCQ5678')
+      await esperarAmt()
+      exigir((await texto('.sello')).includes('verificados en 3 fuentes'), 'PCQ5678: verificada en 3 fuentes (SRI, ATM y AMT)')
+      exigir((await p.$$('.verificacion dl > div')).length === 9, 'verificación muestra los 3 datos de las 3 fuentes')
+      const kmTxt = (await texto('#t-km ~ .cifras')).replace(/\s+/g, ' ')
+      exigir(/\d{3}\.\d{3} km/.test(kmTxt), `kilometraje registrado (${kmTxt.slice(0, 60)})`)
+      exigir((await p.$$('#t-km ~ .tabla-scroll tbody tr')).length >= 5, 'tabla de lecturas del odómetro')
+      exigir((await p.$$('#t-amt ~ .tabla-scroll tbody tr')).length >= 10, 'tabla de revisiones de la AMT')
+      exigir((await texto('#t-amt ~ .ficha')).includes('Liviano'), 'tipo de vehículo según la AMT')
+      exigir((await p.$$('#t-amt ~ details.detalle')).length >= 1, 'defectos o pruebas de la revisión desplegables')
+      exigir(!(await texto('.otras-fuentes')).includes('Historial de revisión técnica'), 'la AMT ya no aparece como consulta manual')
+      await p.evaluate(() => document.querySelectorAll('#t-amt ~ details').forEach((d) => { d.open = true }))
+      exigir(await sinDesborde(), 'AMT sin desbordamiento a 390 px (con defectos desplegados)')
+      const anchas = await p.$$eval('.tabla-scroll', (x) => x.filter((e) => e.scrollWidth > e.clientWidth + 1).length)
+      exigir(anchas === 0, `tablas de la AMT caben (${anchas} no caben)`)
+      await contraste('AMT (claro)')
+      await foto('amt-claro')
+    } else {
+      exigir((await texto('#t-amt ~ p')).length > 0, 'sección de la AMT informa su estado (sin servidor en Ecuador)')
+    }
+
     // 4) Copiar informe
     await p.evaluate(() => [...document.querySelectorAll('button')].find((x) => x.textContent.includes('Copiar informe')).click())
     await espera(300)
     const informe = await p.evaluate(() => window.__copiado)
-    exigir(informe.startsWith('INFORME DE PLACA GSD5678') && informe.includes('Fuentes: SRI'), 'copia el informe completo')
+    exigir(informe.startsWith(`INFORME DE PLACA ${servidor ? 'PCQ5678' : 'GSD5678'}`) && informe.includes('Fuentes: SRI'), 'copia el informe completo')
+    if (servidor) exigir(informe.includes('Kilometraje registrado:') && informe.includes('AMT Quito (web.amt.gob.ec)'), 'el informe incluye kilometraje y AMT')
     exigir((await p.$eval('a[href^="https://wa.me/"]', (a) => a.href)).includes('INFORME%20DE%20PLACA'), 'enlace de WhatsApp con el informe')
 
     // 5) Tema oscuro: misma página abierta por enlace directo (se consulta sola; ahora desde la caché)

@@ -162,6 +162,74 @@ export async function consultarAtm(placa, pedir = fetch, hoy = new Date()) {
   return { encontrada: false }
 }
 
+// ── AMT Quito: API pública del «Historial RTV» (web.amt.gob.ec/web/historialRtv). Sin captcha; se consulta igual que
+// cualquier cliente (sin imitar el origen de la AMT). Chasis y motor ya vienen enmascarados por la AMT.
+// Cada revisión trae el KILOMETRAJE registrado y las mediciones/defectos de la inspección.
+const AMT = 'https://apis.amt.gob.ec/api-gateway/public-api/rtvHistory'
+const AMT_MAX_DETALLES = 30
+const TIPOS_DEFECTO = { defectosMecatronicos: 'Mecatrónico', defectosVisuales: 'Visual', defectosMedibles: 'Medible' }
+
+async function pedirAmt(ruta, cuerpo, pedir, ms = 20000) {
+  const c = new AbortController()
+  const t = setTimeout(() => c.abort(), ms)
+  try {
+    const r = await pedir(`${AMT}/${ruta}`, { method: 'POST', signal: c.signal, body: JSON.stringify(cuerpo),
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': 'AutoPublicador/1.0 (consulta de placa)' } })
+    if (!r.ok) return null
+    const j = await r.json().catch(() => null)
+    return j && j.codRetorno === '0001' ? j.retorno : null
+  } finally { clearTimeout(t) }
+}
+
+const fechaValida = (s) => (/^\d{4}-\d{2}-\d{2}/.test(String(s ?? '')) ? String(s).slice(0, 10) : null)
+
+/** Una medición de la inspección en formato propio (solo datos técnicos). */
+export function medicionAmt(d, tipo) {
+  const valor = d.unidadMedida && d.unidadMedida !== '***' ? `${(+d.valorMedido).toLocaleString('es-EC')} ${d.unidadMedida}` : null
+  return { tipo, elemento: String(d.descripcionMaquina ?? '').trim(), resultado: String(d.descCausa ?? '').trim(), defecto: d.codigoCausa !== 'OK',
+    valor, nota: String(d.descripcion ?? '').trim() || null }
+}
+
+/** Detalle de una revisión: kilometraje, certificado y mediciones; los defectos son las mediciones que no salieron «OK». */
+export function leerDetalleAmt(det) {
+  if (!det?.revision) return null
+  const mediciones = Object.entries(TIPOS_DEFECTO).flatMap(([k, tipo]) => (det[k] ?? []).map((d) => medicionAmt(d, tipo)))
+  const km = parseInt(String(det.revision.kilometraje ?? '').replace(/\D/g, ''), 10)
+  return { kilometraje: km > 0 ? km : null, certificado: det.revision.numCertificado || null, adhesivo: det.revision.numAdhesivo || null,
+    emision: fechaValida(det.revision.fechaEmision), pruebas: mediciones.length, defectos: mediciones.filter((m) => m.defecto), mediciones }
+}
+
+/** Datos del vehículo, todas las revisiones técnicas en Quito y su detalle (más reciente primero). */
+export async function consultarAmt(placa, pedir = fetch) {
+  for (const v of variantesPlaca(placa)) {
+    const datos = await pedirAmt('vehiculo/getData', { dato: v, tipo: '0' }, pedir, 10000).catch(() => null)
+    const veh = datos?.vehiculo
+    if (!veh) continue
+    const lista = (datos.revisiones ?? []).map((r) => ({ ...r, fecha: fechaValida(r.fechaPresentacion) }))
+    const presentadas = lista.filter((r) => r.fecha && r.codRevision).slice(0, AMT_MAX_DETALLES)
+    // Detalles de 6 en 6 para no saturar el servicio de la AMT
+    const detalles = new Map()
+    for (let i = 0; i < presentadas.length; i += 6) {
+      await Promise.all(presentadas.slice(i, i + 6).map((r) => pedirAmt('revision/getCabecera', { numVehiculo: veh.numVehiculo, codRevision: r.codRevision }, pedir)
+        .then((d) => detalles.set(r.codRevision, leerDetalleAmt(d))).catch(() => {})))
+    }
+    const revisiones = lista.map((r) => {
+      const d = detalles.get(r.codRevision)
+      return { fecha: r.fecha, vence: fechaValida(r.fechaVencimiento), estado: String(r.estadoRevision ?? '').trim(), centro: String(r.centroRevision ?? '').trim() || null,
+        intento: +r.numRevision || null, kilometraje: d?.kilometraje ?? null, certificado: d?.certificado ?? null, pruebas: d?.pruebas ?? 0, defectos: d?.defectos ?? [],
+        mediciones: d?.mediciones ?? [] }
+    })
+    // Las mediciones completas solo de la última revisión presentada (las demás ya resumen sus defectos)
+    const ultima = revisiones.findIndex((r) => r.fecha && r.pruebas)
+    revisiones.forEach((r, i) => { if (i !== ultima) delete r.mediciones })
+    return { encontrada: true, registrada: v,
+      vehiculo: { marca: veh.marca || null, modelo: veh.modelo || null, anio: veh.anio || null, tipo: veh.tipo || null, subtipo: veh.subTipo || null,
+        placaAnterior: veh.placaAnt || null, chasis: veh.chasis || null, motor: veh.motor || null },
+      revisiones }
+  }
+  return { encontrada: false }
+}
+
 /** Todas las fuentes automáticas a la vez; cada una informa su propio error sin detener a las demás. */
 export async function consultarTodo(placa, pedir = fetch) {
   const [sri, atm] = await Promise.all([
@@ -178,12 +246,24 @@ export async function manejar(request, pedir = fetch) {
   if (request.method !== 'GET') return json({ error: 'Método no permitido' }, 405, origen)
   if (url.pathname === '/salud') return json({ ok: true, servicio: 'AutoPublicador · placas' }, 200, origen)
 
-  const m = url.pathname.match(/^\/(placa|consulta)\/([A-Za-z0-9-]+)$/)
-  if (!m) return json({ error: 'Ruta no encontrada. Usa /placa/ABC1234 o /consulta/ABC1234' }, 404, origen)
+  const m = url.pathname.match(/^\/(placa|consulta|amt)\/([A-Za-z0-9-]+)$/)
+  if (!m) return json({ error: 'Ruta no encontrada. Usa /placa/ABC1234, /consulta/ABC1234 o /amt/ABC1234' }, 404, origen)
   const placa = m[2].toUpperCase().replace(/[^A-Z0-9]/g, '')
   if (!placaValida(placa)) return json({ error: 'Placa no válida' }, 400, origen)
 
   const cache = typeof caches !== 'undefined' ? caches.default : null
+  if (m[1] === 'amt') {
+    // Ruta aparte: la AMT puede requerir ~20 llamadas y Cloudflare limita las llamadas por consulta
+    const claveA = new Request(`https://cache.autopublicador/v1/amt/${placa}`)
+    if (cache && url.searchParams.get('nuevo') !== '1') {
+      const guardada = await cache.match(claveA)
+      if (guardada) return json(await guardada.json(), 200, origen, { 'X-Cache': 'HIT' })
+    }
+    const amt = await consultarAmt(placa, pedir).catch(() => ({ encontrada: false, error: 'La AMT de Quito no respondió.' }))
+    const cuerpo = { placa, consultado: new Date().toISOString(), amt }
+    if (cache && amt.encontrada) await cache.put(claveA, new Response(JSON.stringify(cuerpo), { headers: { 'Cache-Control': `max-age=${CACHE_SEGUNDOS}` } }))
+    return json(cuerpo, 200, origen, { 'X-Cache': 'MISS' })
+  }
   if (m[1] === 'consulta') {
     const claveC = new Request(`https://cache.autopublicador/v1/consulta/${placa}`)
     if (cache && url.searchParams.get('nuevo') !== '1') {

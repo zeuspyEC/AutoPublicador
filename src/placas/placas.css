@@ -53,7 +53,7 @@
 .etiqueta-estado { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .82rem; font-weight: 600; background: var(--superficie-2); color: var(--texto); border: 1px solid var(--borde); }
 .etiqueta-estado.coincide { background: var(--exito-claro); color: var(--exito); border-color: var(--exito); }
 .etiqueta-estado.difiere { background: transparent; color: var(--peligro); border-color: var(--peligro); }
-.etiqueta-estado.solo-sri, .etiqueta-estado.solo-atm { background: var(--alerta-claro); color: var(--alerta); border-color: var(--alerta); }
+.etiqueta-estado.una-fuente { background: var(--alerta-claro); color: var(--alerta); border-color: var(--alerta); }
 
 .ficha { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: .55rem 1rem; margin: .3rem 0 0; }
 .ficha > div { border-bottom: 1px dashed var(--borde); padding-bottom: .35rem; min-width: 0; }
@@ -70,6 +70,26 @@
 .detalle { margin-top: .6rem; border: 1px solid var(--borde); border-radius: 10px; padding: .5rem .75rem; background: var(--superficie-2); }
 .detalle summary { cursor: pointer; font-weight: 600; }
 .detalle ul { margin: .4rem 0 0; padding-left: 1.1rem; display: grid; gap: .2rem; font-size: .92rem; }
+
+.girando.chico { display: inline-block; width: .85rem; height: .85rem; border-width: 2px; vertical-align: -2px; margin-right: .3rem; }
+.ayuda-sello { color: var(--texto-2); font-size: .85rem; }
+
+.verificacion { list-style: none; padding: 0; margin: .3rem 0 0; display: grid; gap: .6rem; }
+.verificacion li { border-bottom: 1px solid var(--borde); padding-bottom: .55rem; }
+.verificacion-cabecera { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.verificacion dl { display: grid; gap: .2rem; margin: .35rem 0 0; }
+.verificacion dl > div { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr); gap: .5rem; }
+.verificacion dt { color: var(--texto-2); font-size: .82rem; font-weight: 600; }
+.verificacion dd { margin: 0; overflow-wrap: anywhere; }
+
+.alerta-km { background: var(--alerta-claro); border: 1px solid var(--alerta); color: var(--texto); border-radius: 10px; padding: .6rem .75rem; margin: 0 0 .7rem; }
+.tabla td.negativo { color: var(--peligro); font-weight: 700; }
+
+.mediciones { list-style: none; padding: 0 !important; margin: .4rem 0 0; display: grid; gap: .35rem !important; }
+.mediciones li { display: flex; justify-content: space-between; align-items: flex-start; gap: .6rem; border-bottom: 1px dashed var(--borde); padding-bottom: .3rem; }
+.mediciones li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.medicion-valor { display: flex; gap: .4rem; align-items: center; flex: none; }
+.medicion-valor small { color: var(--texto-2); white-space: nowrap; }
 
 .fuente-estado { display: inline-block; font-weight: 600; }
 .fuente-estado.ok { color: var(--exito); }
